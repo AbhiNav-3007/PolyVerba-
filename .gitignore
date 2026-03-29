@@ -1,0 +1,30 @@
+# Python Environment
+venv/
+__pycache__/
+*.pyc
+.env
+.pytest_cache/
+
+# AI Models & Audio Cache (Huge files, never sync these)
+*.bin
+*.pt
+audio_dump/
+temp_chunks/
+
+# React Frontend
+frontend/web/node_modules/
+frontend/web/dist/
+frontend/web/.env.local
+
+# IDEs & System
+.vscode/
+.idea/
+.DS_Store
+
+# Secret Hackathon Documents (Keep Local, Do Not Upload)
+implementation_plan.md
+hackathon_strategy.md
+hackathon_pitch_qa.md
+custom_cloud_deployment_plan.md
+task.md
+setup_readme.md
