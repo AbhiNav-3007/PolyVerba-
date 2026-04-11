@@ -1,5 +1,4 @@
 import numpy as np
-import pyaudio
 import soundcard as sc
 import threading
 import queue
