@@ -56,9 +56,12 @@ Attendees do not need to download an app. They scan a QR code shown on the proje
 Before the AI even listens to the speaker, the system mathematically strips out background interference like venue Air Conditioners or audience chatter, completely eliminating "AI Hallucinations".
 **Tech Stack:** `RNNoise (C-compiled bindings)`
 
-### 🎛️ 7. Universal Audio Loopback Routing
-The host can feed PolyVerba from physical stage microphones AND internal desktop audio simultaneously. This means PolyVerba can natively translate live Zoom meetings or YouTube videos without needing messy professional audio cables.
-**Tech Stack:** `soundcard`, `pyaudio`
+### 🎛️ 7. 3-Mode Hardware Audio Arbitration
+A single monolithic audio capture setup creates audio bleed (e.g., room noise leaking into a sports broadcast). PolyVerba solves this with an intelligent CPU-saving Frontend toggle that dynamically isolates hardware execution sequences:
+*   **Broadcast Mode:** Flawlessly isolates internal system loopback, mechanically muting the physical microphone to prevent room-noise bleed (e.g., for YouTube Sports).
+*   **Seminar Mode:** Locks onto the speaker's external stage microphone while bypassing all OS-level notification noises.
+*   **Conference Mode:** Mathematically merges both pure Loopback and Microphone input for real-time Web RTC (Zoom/Meet/Teams) dual-translation.
+**Tech Stack:** `soundcard`, `numpy`, `Threading queues`
 
 ### ⏱️ 8. Predictive Slicing & Language Detection
 PolyVerba automatically detects the speaker's language within seconds. To keep latency under 1-second, it slices audio into overlapping 400-millisecond chunks, translating instantly without chopping words in half.
