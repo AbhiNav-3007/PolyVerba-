@@ -13,25 +13,16 @@ class AudioCaptureEngine:
         self.is_running = False
 
     def start_microphone_stream(self):
-        p = pyaudio.PyAudio()
         try:
-            stream = p.open(format=pyaudio.paFloat32,
-                            channels=1,
-                            rate=self.sample_rate,
-                            input=True,
-                            frames_per_buffer=self.chunk_size)
+            default_mic = sc.default_microphone()
+            with default_mic.recorder(samplerate=self.sample_rate, channels=1) as mic:
+                while self.is_running:
+                    data = mic.record(numframes=self.chunk_size)
+                    audio_data = data[:, 0].astype(np.float32)
+                    if self.mic_q.full(): self.mic_q.get_nowait()
+                    self.mic_q.put(audio_data)
         except Exception as e:
-            print(f"[Warning] Microphone not found or error: {e}")
-            return
-            
-        while self.is_running:
-            try:
-                data = stream.read(self.chunk_size, exception_on_overflow=False)
-                audio_data = np.frombuffer(data, dtype=np.float32)
-                if self.mic_q.full(): self.mic_q.get_nowait()
-                self.mic_q.put(audio_data)
-            except Exception as e:
-                print(f"[Mic error] {e}")
+            print(f"[Mic error] {e}")
 
     def start_loopback_stream(self):
         try:
