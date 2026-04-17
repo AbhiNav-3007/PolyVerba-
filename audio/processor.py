@@ -5,7 +5,7 @@ class AudioProcessor:
         self.sample_rate = sample_rate
         
         # Option C Architecture: VAD-Adaptive Slicing Parameters
-        self.energy_threshold = 0.001       # Calibrated: silence=0.000015, speech=0.003+ (gap is clean)
+        self.energy_threshold = 0.0005      # Calibrated for Earbuds: pure silence is < 0.0002, speech is > 0.002
         self.breath_pause_sec = 0.4         # 400ms pause triggers an instant sentence-cut
         self.safety_timeout_sec = 2.0       # Maximum 2.0 seconds before forcing a chunk (latency barrier)
         self.overlap_sec = 0.5              # 500ms overlap to prevent chopping words in half
@@ -61,6 +61,14 @@ class AudioProcessor:
 
             # 4. Slicing and Overlap Logic
             if triggered:
+                
+                # [ANTI-HALLUCINATION FILTER] 
+                # If we waited 2 seconds and nobody ever spoke, silently drop the buffer 
+                # so we don't send pure silence to Whisper (which causes the 'Thank you' bug).
+                if not self.is_speaking and "Safety Timeout" in reason:
+                    self.audio_buffer = np.array([], dtype=np.float32)
+                    continue
+                    
                 # Yield the entire active buffer to the AI Translator
                 chunk_to_translate = self.audio_buffer.copy()
                 yield (chunk_to_translate, reason)
