@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="PolyVerba — Real-time multilingual captioning powered by offline Edge AI.">
+    <title>PolyVerba — Live Multilingual Captioning</title>
+
+    <!-- Inter for UI chrome -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+
+    <!--
+        Noto Sans covers all Indic scripts — loaded ASYNC so offline still works.
+        These are needed for proper rendering of:
+          Devanagari (Hindi/Marathi/Nepali), Bengali, Tamil, Telugu,
+          Kannada, Gujarati, Gurmukhi (Punjabi), Malayalam, Arabic (Urdu)
+    -->
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans:wght@400;600&family=Noto+Sans+Devanagari:wght@400;600&family=Noto+Sans+Bengali:wght@400;600&family=Noto+Sans+Tamil:wght@400;600&family=Noto+Sans+Telugu:wght@400;600&family=Noto+Sans+Kannada:wght@400;600&family=Noto+Sans+Gujarati:wght@400;600&family=Noto+Sans+Malayalam:wght@400;600&family=Noto+Nastaliq+Urdu:wght@400;600&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
+
+    <link rel="stylesheet" href="/static/style.css?v={{ v }}">
+</head>
+<body>
+
+    <!-- ── Background Gradient Orbs ── -->
+    <div class="orb orb-purple"></div>
+    <div class="orb orb-indigo"></div>
+    <div class="orb orb-accent"></div>
+
+    <!--
+        Indic Alphabet Background — 25 letters from all 12 script families.
+        Positioned ONLY in the LEFT strip (left: 0–7%) and RIGHT strip (left: 88–99%).
+        This keeps all letters in the narrow gutters beside the caption glass panel,
+        never overlapping the text box, regardless of screen width.
+        position: fixed, z-index: 1 — survives all JS state changes.
+    -->
+    <div class="indic-bg" aria-hidden="true">
+
+        <!-- ══════════════════════════
+             LEFT GUTTER (left: 0–7%)
+             ══════════════════════════ -->
+        <!-- Devanagari अ  — Hindi/Marathi -->
+        <span class="ibl" style="top:4%;  left:0%;  font-size:10rem;animation-delay:0s;  animation-duration:24s">अ</span>
+        <!-- Malayalam ആ -->
+        <span class="ibl" style="top:17%; left:2%;  font-size:5.5rem;animation-delay:4s;  animation-duration:27s">ആ</span>
+        <!-- Kannada ಅ -->
+        <span class="ibl" style="top:28%; left:0%;  font-size:7rem;  animation-delay:8s;  animation-duration:30s">ಅ</span>
+        <!-- Urdu ا (Arabic script) -->
+        <span class="ibl" style="top:40%; left:3%;  font-size:6.5rem;animation-delay:12s; animation-duration:22s">ا</span>
+        <!-- Devanagari ब -->
+        <span class="ibl" style="top:51%; left:1%;  font-size:6rem;  animation-delay:16s; animation-duration:29s">ब</span>
+        <!-- Kannada ಆ -->
+        <span class="ibl" style="top:62%; left:2%;  font-size:5.5rem;animation-delay:3s;  animation-duration:33s">ಆ</span>
+        <!-- Urdu ب -->
+        <span class="ibl" style="top:72%; left:0%;  font-size:5rem;  animation-delay:19s; animation-duration:26s">ب</span>
+        <!-- Latin A -->
+        <span class="ibl" style="top:82%; left:3%;  font-size:8rem;  animation-delay:7s;  animation-duration:21s">A</span>
+        <!-- Odia ଅ -->
+        <span class="ibl" style="top:92%; left:1%;  font-size:5.5rem;animation-delay:14s; animation-duration:28s">ଅ</span>
+
+        <!-- ═══════════════════════════
+             RIGHT GUTTER (left: 88–99%)
+             ═══════════════════════════ -->
+        <!-- Bengali অ -->
+        <span class="ibl" style="top:5%;  left:90%; font-size:8.5rem;animation-delay:2s;  animation-duration:25s">অ</span>
+        <!-- Tamil அ -->
+        <span class="ibl" style="top:14%; left:88%; font-size:8rem;  animation-delay:6s;  animation-duration:20s">அ</span>
+        <!-- Telugu అ -->
+        <span class="ibl" style="top:25%; left:92%; font-size:7.5rem;animation-delay:10s; animation-duration:24s">అ</span>
+        <!-- Bengali আ -->
+        <span class="ibl" style="top:35%; left:89%; font-size:5.5rem;animation-delay:1s;  animation-duration:31s">আ</span>
+        <!-- Gujarati અ -->
+        <span class="ibl" style="top:45%; left:94%; font-size:6.5rem;animation-delay:15s; animation-duration:28s">અ</span>
+        <!-- Gurmukhi ਅ (Punjabi) -->
+        <span class="ibl" style="top:55%; left:88%; font-size:7rem;  animation-delay:9s;  animation-duration:23s">ਅ</span>
+        <!-- Tamil ஆ -->
+        <span class="ibl" style="top:65%; left:91%; font-size:6rem;  animation-delay:5s;  animation-duration:26s">ஆ</span>
+        <!-- Telugu ఆ -->
+        <span class="ibl" style="top:74%; left:88%; font-size:5rem;  animation-delay:18s; animation-duration:33s">ఆ</span>
+        <!-- Malayalam അ -->
+        <span class="ibl" style="top:83%; left:93%; font-size:7.5rem;animation-delay:11s; animation-duration:31s">അ</span>
+        <!-- Sanskrit ॐ -->
+        <span class="ibl" style="top:91%; left:89%; font-size:5.5rem;animation-delay:20s; animation-duration:29s">ॐ</span>
+        <!-- Assamese ক -->
+        <span class="ibl" style="top:43%; left:97%; font-size:6rem;  animation-delay:13s; animation-duration:34s">ক</span>
+        <!-- Gurmukhi ਆ -->
+        <span class="ibl" style="top:8%;  left:96%; font-size:5rem;  animation-delay:17s; animation-duration:24s">ਆ</span>
+        <!-- Latin Z -->
+        <span class="ibl" style="top:58%; left:96%; font-size:6rem;  animation-delay:21s; animation-duration:36s">Z</span>
+
+    </div>
+
+    <div class="app">
+
+        <!-- ══════════════════════════════════════════════════════════ -->
+        <!--  NAVBAR                                                    -->
+        <!-- ══════════════════════════════════════════════════════════ -->
+        <nav class="navbar glass" id="navbar">
+            <!-- Logo -->
+            <div class="nav-brand">
+                <div class="logo-icon">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>
+                    </svg>
+                </div>
+                <div class="logo-text">
+                    <h1>PolyVerba</h1>
+                    <span class="tagline">EDGE AI &bull; OFFLINE</span>
+                </div>
+            </div>
+
+            <!-- Language Controls -->
+            <div class="nav-controls">
+                <!-- Input Language (Model selector) -->
+                <div class="info-cell">
+                    <span class="info-label">Input Language</span>
+                    <select id="model-select" class="lang-dropdown">
+                        <option value="base.en" selected>English Only  (faster)</option>
+                        <option value="small">Auto-Detect  (multilingual)</option>
+                    </select>
+                </div>
+                <div class="nav-divider"></div>
+                <!-- Output / Translate To -->
+                <div class="info-cell">
+                    <span class="info-label">Translate To</span>
+                    <select id="lang-select" class="lang-dropdown">
+                        {% for lang in languages %}
+                        <option value="{{ lang }}" {{ 'selected' if lang == 'English' else '' }}>{{ lang }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+            </div>
+
+            <!-- Actions -->
+            <div class="nav-actions">
+                <!-- Active model badge -->
+                <div class="model-badge" id="model-badge" title="Active Whisper model">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                    <span id="model-badge-text">base.en</span>
+                </div>
+
+                <!-- Connection Status -->
+                <div class="status-pill" id="status-pill">
+                    <span class="status-dot" id="status-dot"></span>
+                    <span class="status-label" id="status-label">CONNECTING</span>
+                </div>
+
+                <!-- Start / Stop -->
+                <button class="btn btn-start" id="btn-start" disabled>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+                    Start
+                </button>
+                <button class="btn btn-stop" id="btn-stop" disabled>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><rect x="4" y="4" width="16" height="16" rx="2"/></svg>
+                    Stop
+                </button>
+            </div>
+        </nav>
+
+
+        <!-- ══════════════════════════════════════════════════════════ -->
+        <!--  CAPTION PANEL                                             -->
+        <!-- ══════════════════════════════════════════════════════════ -->
+        <main class="caption-panel glass" id="caption-panel">
+            <!-- Latency Badge (top-right) -->
+            <div class="latency-badge" id="latency-badge">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
+                </svg>
+                <span id="latency-value">&mdash;</span>
+            </div>
+
+            <!-- Scrollable Captions Area -->
+            <div class="captions-scroll" id="captions-scroll">
+                <div class="captions-inner" id="captions-inner">
+
+                    <!-- Welcome State — hidden once captions start -->
+                    <div class="welcome-state" id="welcome-state">
+                        <div class="welcome-icon">
+                            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" opacity="0.3">
+                                <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
+                                <path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/>
+                            </svg>
+                        </div>
+                        <p class="welcome-title">Welcome to PolyVerba</p>
+                        <p class="welcome-sub">Choose <strong>Input Language</strong> and <strong>Translate To</strong> &mdash; then press <strong>Start</strong></p>
+                    </div>
+
+                    <!--
+                        CONTINUOUS FLOW paragraph — all chunks append here inline.
+                        Text wraps naturally at container boundaries (no artificial line breaks).
+                        No hyphens on word-wrap. Older text fades, newest text is bright white.
+                    -->
+                    <div class="caption-flow" id="caption-flow" style="display:none"><span class="flow-cursor" id="flow-cursor">|</span></div>
+
+                    <!-- Listening indicator -->
+                    <div class="listening-indicator" id="listen-ring" style="display:none">
+                        <div class="listening-dots">
+                            <span></span><span></span><span></span>
+                        </div>
+                        <span class="listening-label">Listening...</span>
+                    </div>
+
+                    <!-- Scroll anchor -->
+                    <div id="scroll-anchor"></div>
+                </div>
+            </div>
+        </main>
+
+        <!-- ══════════════════════════════════════════════════════════ -->
+        <!--  FOOTER BAR                                                -->
+        <!-- ══════════════════════════════════════════════════════════ -->
+        <footer class="footer-bar glass">
+            <span class="footer-text">Powered by <strong>Faster-Whisper</strong> &amp; <strong>IndicTrans2</strong> &bull; 100% Offline Edge AI</span>
+        </footer>
+
+    </div>
+
+    <script src="/static/app.js?v={{ v }}"></script>
+</body>
+</html>

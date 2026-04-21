@@ -1,0 +1,821 @@
+/* ══════════════════════════════════════════════════════════════════════════
+   PolyVerba — Premium Glassmorphism Design System
+   ════════════════════════════════════════════════════════════════════════ */
+
+/* ── Reset & Base ──────────────────────────────────────────────────────── */
+*, *::before, *::after {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+:root {
+    --bg-deep:     #0F0B18;                        /* dark purple-tinted, not pure black */
+    --bg-surface:  rgba(255, 255, 255, 0.045);     /* slightly lighter glass panels */
+    --border-glass: rgba(255, 255, 255, 0.10);
+    --border-hover: rgba(255, 255, 255, 0.20);
+
+    --text-primary:   rgba(255, 255, 255, 0.95);
+    --text-secondary: rgba(255, 255, 255, 0.60);
+    --text-muted:     rgba(255, 255, 255, 0.35);
+    --text-caption-past: rgba(255, 255, 255, 0.35);
+
+    --purple-500: #A78BFA;   /* lighter purple tint — more visible on dark bg */
+    --purple-600: #8B5CF6;
+    --purple-700: #7C3AED;
+    --indigo-500: #818CF8;
+    --indigo-600: #6366F1;
+    --emerald-500: #34D399;
+    --red-500:    #F87171;
+
+    --glow-purple: 0 0 24px rgba(167, 139, 250, 0.30);
+    --glow-start:  0 0 28px rgba(139, 92, 246, 0.40);
+    --glow-stop:   0 0 28px rgba(248, 113, 113, 0.40);
+
+    --radius-sm: 10px;
+    --radius-md: 16px;
+    --radius-lg: 24px;
+    --radius-xl: 32px;
+    --radius-pill: 100px;
+
+    --font: 'Inter', 'Segoe UI', system-ui, -apple-system, sans-serif;
+
+    /*
+     * Caption font stack — Latin first (Inter), then all Indic Noto variants.
+     * Browser auto-selects the right font based on Unicode block of each character.
+     * Covers: Devanagari, Bengali, Tamil, Telugu, Kannada, Gujarati,
+     *         Malayalam, Gurmukhi, Arabic (Urdu/Nastaliq).
+     */
+    --caption-font:
+        'Inter',
+        'Noto Sans',
+        'Noto Sans Devanagari',
+        'Noto Sans Bengali',
+        'Noto Sans Tamil',
+        'Noto Sans Telugu',
+        'Noto Sans Kannada',
+        'Noto Sans Gujarati',
+        'Noto Sans Malayalam',
+        'Noto Nastaliq Urdu',
+        'Mangal',          /* Windows fallback for Devanagari */
+        'Shruti',          /* Windows fallback for Gujarati   */
+        'Tunga',           /* Windows fallback for Kannada    */
+        'Latha',           /* Windows fallback for Tamil      */
+        'Gautami',         /* Windows fallback for Telugu     */
+        'Vrinda',          /* Windows fallback for Bengali    */
+        sans-serif;
+}
+
+html, body {
+    height: 100%;
+    background: var(--bg-deep);
+    color: var(--text-primary);
+    font-family: var(--font);
+    overflow: hidden;
+    -webkit-font-smoothing: antialiased;
+}
+
+/* ── Glass Utility ─────────────────────────────────────────────────────── */
+.glass {
+    background: var(--bg-surface);
+    backdrop-filter: blur(24px);
+    -webkit-backdrop-filter: blur(24px);
+    border: 1px solid var(--border-glass);
+}
+
+/* ── Background Orbs ───────────────────────────────────────────────────── */
+.orb {
+    position: fixed;
+    border-radius: 50%;
+    pointer-events: none;
+    z-index: 0;
+}
+
+.orb-purple {
+    top: -180px;
+    right: -80px;
+    width: 550px;
+    height: 550px;
+    background: rgba(124, 58, 237, 0.15);
+    filter: blur(160px);
+}
+
+.orb-indigo {
+    bottom: -200px;
+    left: -120px;
+    width: 650px;
+    height: 650px;
+    background: rgba(79, 70, 229, 0.12);
+    filter: blur(180px);
+}
+
+.orb-accent {
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 400px;
+    height: 400px;
+    background: rgba(139, 92, 246, 0.06);
+    filter: blur(120px);
+}
+
+/* ── Indic Alphabet Background Letters ───────────────────────────────────
+   Positioned absolutely behind all UI (z-index: 0, pointer-events: none).
+   Each letter floats slowly with a gentle Y-drift and opacity pulse.
+   Uses the same --caption-font stack so scripts render correctly.
+   ─────────────────────────────────────────────────────────────────────── */
+.indic-bg {
+    position: fixed;
+    inset: 0;
+    z-index: 1;          /* above dark bg, below glass panels (.app is z-index 2) */
+    pointer-events: none;
+    overflow: hidden;
+}
+
+.ibl {
+    position: absolute;
+    font-family: var(--caption-font);
+    font-weight: 700;
+    /*
+     * Use white/light-purple at full alpha — the element opacity animation controls
+     * visibility. This prevents doubling of alpha values (was: element opacity 0.10 ×
+     * color alpha 0.13 = 1.3% visible — nearly invisible).
+     */
+    color: rgba(220, 210, 255, 1);
+    line-height: 1;
+    pointer-events: none;
+    user-select: none;
+    /* Start at 0 opacity so first appearance feels like a gradual reveal */
+    opacity: 0;
+    animation: ibl-breathe linear infinite;
+    will-change: transform, opacity;
+}
+
+/*
+ * ibl-breathe: Slow appear → hold → drift up → fade → pause → repeat  
+ * The pause phase (85–100% at opacity 0) creates the reappearing effect the user expects.
+ * Duration is set per-element inline (20–36s) so each letter has a different phase.
+ */
+@keyframes ibl-breathe {
+    0%   { opacity: 0;    transform: translateY(0px); }
+    10%  { opacity: 0.09; }
+    30%  { opacity: 0.20; transform: translateY(-8px); }
+    55%  { opacity: 0.22; transform: translateY(-18px); }
+    75%  { opacity: 0.10; transform: translateY(-22px); }
+    85%  { opacity: 0;    transform: translateY(-24px); }
+    100% { opacity: 0;    transform: translateY(0px); }   /* reset for next cycle */
+}
+
+/* App container slides in on page load */
+@keyframes app-enter {
+    from { opacity: 0; transform: translateY(18px); }
+    to   { opacity: 1; transform: translateY(0);    }
+}
+.app {
+    position: relative;
+    z-index: 2;          /* above .indic-bg (z:1) so glass panels sit over letters at center */
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+    max-width: 1280px;
+    margin: 0 auto;
+    padding: 16px;
+    gap: 14px;
+    animation: app-enter 0.7s cubic-bezier(0.22, 0.8, 0.4, 1) both;
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   NAVBAR
+   ══════════════════════════════════════════════════════════════════════ */
+.navbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 14px 24px;
+    border-radius: var(--radius-xl);
+    flex-shrink: 0;
+    gap: 16px;
+    flex-wrap: wrap;
+}
+
+/* Logo */
+.nav-brand {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.logo-icon {
+    width: 42px;
+    height: 42px;
+    border-radius: var(--radius-sm);
+    background: linear-gradient(135deg, var(--purple-500), var(--indigo-600));
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    box-shadow: var(--glow-purple);
+    flex-shrink: 0;
+}
+
+.logo-text h1 {
+    font-size: 1.25rem;
+    font-weight: 800;
+    letter-spacing: -0.02em;
+    line-height: 1.1;
+}
+
+.tagline {
+    font-size: 0.6rem;
+    font-weight: 700;
+    letter-spacing: 0.18em;
+    color: rgba(168, 130, 255, 0.7);
+    text-transform: uppercase;
+}
+
+/* Nav Controls (Source + Target) */
+.nav-controls {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    background: rgba(0, 0, 0, 0.25);
+    padding: 10px 20px;
+    border-radius: var(--radius-md);
+    border: 1px solid rgba(255, 255, 255, 0.04);
+}
+
+.info-cell {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.info-label {
+    font-size: 0.6rem;
+    font-weight: 700;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: var(--purple-500);
+}
+
+.info-value {
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.nav-divider {
+    width: 1px;
+    height: 32px;
+    background: rgba(255, 255, 255, 0.08);
+}
+
+/* Loopback / Mic Toggle */
+.mode-toggle {
+    display: flex;
+    gap: 3px;
+    background: rgba(0, 0, 0, 0.3);
+    border-radius: var(--radius-pill);
+    padding: 3px;
+    border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.mode-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 5px 12px;
+    border-radius: var(--radius-pill);
+    border: none;
+    font-family: var(--font);
+    font-size: 0.72rem;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    color: var(--text-muted);
+    background: transparent;
+    white-space: nowrap;
+    letter-spacing: 0.02em;
+}
+
+.mode-btn:hover {
+    color: var(--text-secondary);
+}
+
+.mode-btn.active {
+    background: linear-gradient(135deg, var(--purple-600), var(--indigo-600));
+    color: white;
+    box-shadow: 0 0 12px rgba(124, 58, 237, 0.4);
+}
+
+.mode-btn:disabled {
+    cursor: not-allowed;
+    opacity: 0.5;
+}
+
+.lang-dropdown {
+    background: transparent;
+    border: none;
+    color: rgba(196, 167, 255, 0.9);
+    font-family: var(--font);
+    font-size: 0.85rem;
+    font-weight: 700;
+    cursor: pointer;
+    outline: none;
+    padding: 2px 0;
+}
+
+.lang-dropdown option {
+    background: #111;
+    color: white;
+    padding: 8px;
+}
+
+/* Nav Actions */
+.nav-actions {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+/* Status Pill */
+.status-pill {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 14px;
+    border-radius: var(--radius-pill);
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.status-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--red-500);
+    transition: background 0.3s, box-shadow 0.3s;
+}
+
+.status-dot.connected {
+    background: var(--emerald-500);
+    box-shadow: 0 0 8px rgba(16, 185, 129, 0.6);
+    animation: pulse-dot 2s ease-in-out infinite;
+}
+
+.status-label {
+    font-size: 0.65rem;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    font-family: 'Courier New', monospace;
+    color: var(--text-secondary);
+}
+
+/* Buttons */
+.btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 9px 22px;
+    border-radius: var(--radius-sm);
+    border: 1px solid transparent;
+    font-family: var(--font);
+    font-size: 0.8rem;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.25s ease;
+    letter-spacing: 0.02em;
+}
+
+.btn:disabled {
+    cursor: not-allowed;
+    opacity: 0.35;
+}
+
+.btn-start {
+    background: linear-gradient(135deg, var(--purple-600), var(--indigo-600));
+    color: white;
+    box-shadow: var(--glow-start);
+}
+
+.btn-start:hover:not(:disabled) {
+    box-shadow: 0 0 35px rgba(124, 58, 237, 0.6);
+    transform: translateY(-1px);
+}
+
+.btn-start:disabled {
+    box-shadow: none;
+}
+
+.btn-stop {
+    background: rgba(255, 255, 255, 0.05);
+    color: var(--text-muted);
+    border-color: rgba(255, 255, 255, 0.06);
+}
+
+.btn-stop.active {
+    background: var(--red-500);
+    color: white;
+    border-color: rgba(239, 68, 68, 0.5);
+    box-shadow: var(--glow-stop);
+    opacity: 1;
+}
+
+.btn-stop.active:hover {
+    background: #dc2626;
+    box-shadow: 0 0 35px rgba(239, 68, 68, 0.5);
+    transform: translateY(-1px);
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   CAPTION PANEL
+   ══════════════════════════════════════════════════════════════════════ */
+.caption-panel {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    border-radius: var(--radius-xl);
+    position: relative;
+    overflow: hidden;
+    min-height: 0;
+}
+
+/* Latency Badge */
+.latency-badge {
+    position: absolute;
+    top: 20px;
+    right: 24px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 14px;
+    background: rgba(0, 0, 0, 0.4);
+    border-radius: var(--radius-pill);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    z-index: 10;
+    color: rgba(168, 130, 255, 0.8);
+    font-size: 0.75rem;
+    font-weight: 600;
+    font-family: 'Courier New', monospace;
+    transition: opacity 0.3s;
+}
+
+/* Captions Scroll Container */
+.captions-scroll {
+    flex: 1;
+    overflow-y: auto;
+    padding: 32px 40px 24px;
+    scroll-behavior: smooth;
+}
+
+/* Custom Scrollbar */
+.captions-scroll::-webkit-scrollbar {
+    width: 6px;
+}
+
+.captions-scroll::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.captions-scroll::-webkit-scrollbar-thumb {
+    background: rgba(139, 92, 246, 0.25);
+    border-radius: 10px;
+}
+
+.captions-scroll::-webkit-scrollbar-thumb:hover {
+    background: rgba(139, 92, 246, 0.4);
+}
+
+/* Captions List */
+.captions-inner {
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+    min-height: 100%;
+    gap: 18px;
+    padding-bottom: 20px;
+}
+
+/* Welcome State */
+.welcome-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    margin: auto;
+    gap: 12px;
+    opacity: 0.6;
+}
+
+.welcome-icon {
+    color: var(--text-muted);
+    margin-bottom: 8px;
+}
+
+.welcome-title {
+    font-size: 1.4rem;
+    font-weight: 700;
+    color: var(--text-secondary);
+}
+
+.welcome-sub {
+    font-size: 0.9rem;
+    color: var(--text-muted);
+    max-width: 400px;
+    line-height: 1.5;
+}
+
+.welcome-sub strong {
+    color: var(--purple-500);
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   CONTINUOUS FLOW PARAGRAPH
+   All caption text lives in one inline paragraph - no line breaks between chunks.
+   Text wraps at container boundary naturally (CSS). No hyphens.
+   ══════════════════════════════════════════════════════════════════════ */
+
+.caption-flow {
+    font-size: 1.55rem;
+    font-weight: 500;
+    line-height: 1.9;
+    word-break: break-word;       /* wrap at boundaries, not mid-word */
+    overflow-wrap: break-word;
+    hyphens: none;                /* NEVER insert hyphens on line-break */
+    white-space: normal;
+    font-family: var(--caption-font);
+}
+
+/* ── Confirmed chunks — progressive dimming by age ── */
+/* All chunk-confirmed transitions smoothly when age class updates */
+.chunk-confirmed {
+    display: inline;
+    transition: color 0.6s ease;
+}
+
+/* age-0 = newest (bright white & bold) */
+.chunk-age-0 { color: rgba(255, 255, 255, 0.95); font-weight: 600; }
+/* age-1 = last sentence */
+.chunk-age-1 { color: rgba(255, 255, 255, 0.70); font-weight: 500; }
+/* age-2 */
+.chunk-age-2 { color: rgba(255, 255, 255, 0.45); }
+/* age-3 */
+.chunk-age-3 { color: rgba(255, 255, 255, 0.28); }
+/* age-4+ = oldest visible */
+.chunk-age-4 { color: rgba(255, 255, 255, 0.15); }
+
+/* ── Current draft words (grey, italic) ── */
+.word-draft {
+    display: inline;
+    color: rgba(168, 130, 255, 0.55);
+    font-style: italic;
+    font-weight: 400;
+    animation: word-fade-in 0.18s ease-out both;
+}
+
+@keyframes word-fade-in {
+    from { opacity: 0; }
+    to   { opacity: 1; }
+}
+
+/* ── Blinking cursor at end of flow ── */
+.flow-cursor {
+    display: inline-block;
+    margin-left: 2px;
+    color: var(--purple-500);
+    font-weight: 300;
+    animation: cursor-blink 0.9s ease-in-out infinite;
+}
+
+/* ── Language switch marker: block-level, centered, breaks the line ── */
+.flow-lang-switch {
+    display: block;
+    text-align: center;
+    font-size: 0.82rem;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: rgba(139, 92, 246, 0.55);
+    padding: 14px 0 10px;
+    animation: caption-enter 0.4s ease-out;
+    width: 100%;
+}
+
+.flow-lang-switch::before,
+.flow-lang-switch::after {
+    content: '';
+    display: inline-block;
+    width: 40px;
+    height: 1px;
+    background: rgba(139, 92, 246, 0.3);
+    vertical-align: middle;
+    margin: 0 10px;
+}
+
+/* Keep old .caption-line etc for any backward compat (unused now) */
+.caption-line { display: none; }
+.caption-source { display: none; }
+.caption-switch { display: none; }
+.caption-draft { display: none !important; }
+
+
+/* Scroll anchor */
+.scroll-anchor {
+    height: 10px;
+    flex-shrink: 0;
+}
+
+/* ── Listening Indicator ───────────────────────────────────────────────── */
+.listening-indicator {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 0 4px;
+    animation: caption-enter 0.5s ease-out;
+}
+
+.listening-dots {
+    display: flex;
+    gap: 4px;
+}
+
+.listening-dots span {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--purple-500);
+    animation: listening-bounce 1.4s ease-in-out infinite;
+}
+
+.listening-dots span:nth-child(2) { animation-delay: 0.16s; }
+.listening-dots span:nth-child(3) { animation-delay: 0.32s; }
+
+.listening-label {
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: rgba(168, 130, 255, 0.5);
+    letter-spacing: 0.05em;
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   FOOTER
+   ══════════════════════════════════════════════════════════════════════ */
+.footer-bar {
+    padding: 10px 24px;
+    border-radius: var(--radius-lg);
+    text-align: center;
+    flex-shrink: 0;
+}
+
+.footer-text {
+    font-size: 0.7rem;
+    color: var(--text-muted);
+    letter-spacing: 0.03em;
+}
+
+.footer-text strong {
+    color: rgba(168, 130, 255, 0.5);
+    font-weight: 600;
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   ANIMATIONS
+   ══════════════════════════════════════════════════════════════════════ */
+@keyframes caption-enter {
+    from {
+        opacity: 0;
+        transform: translateY(16px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+@keyframes pulse-dot {
+    0%, 100% { opacity: 1; }
+    50%      { opacity: 0.5; }
+}
+
+@keyframes pulse-bar {
+    0%, 100% { opacity: 1; }
+    50%      { opacity: 0.4; }
+}
+
+@keyframes listening-bounce {
+    0%, 80%, 100% { transform: scale(0.6); opacity: 0.4; }
+    40%           { transform: scale(1);   opacity: 1;   }
+}
+
+@keyframes cursor-blink {
+    0%, 100% { opacity: 1; }
+    50%      { opacity: 0; }
+}
+
+/* ── Cursor on active draft line ── */
+.cursor-blink {
+    display: inline-block;
+    margin-left: 2px;
+    color: var(--purple-500);
+    font-weight: 300;
+    animation: cursor-blink 0.9s ease-in-out infinite;
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   TOAST NOTIFICATIONS
+   ══════════════════════════════════════════════════════════════════════ */
+
+.toast {
+    position: fixed;
+    bottom: 80px;
+    left: 50%;
+    transform: translateX(-50%) translateY(20px);
+    padding: 10px 24px;
+    border-radius: var(--radius-pill);
+    font-size: 0.82rem;
+    font-weight: 600;
+    font-family: var(--font);
+    letter-spacing: 0.02em;
+    opacity: 0;
+    transition: opacity 0.3s ease, transform 0.3s ease;
+    z-index: 1000;
+    white-space: nowrap;
+    pointer-events: none;
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+}
+
+.toast-visible {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+}
+
+.toast-info {
+    background: rgba(139, 92, 246, 0.25);
+    border: 1px solid rgba(139, 92, 246, 0.4);
+    color: rgba(216, 196, 255, 0.95);
+}
+
+.toast-error {
+    background: rgba(239, 68, 68, 0.2);
+    border: 1px solid rgba(239, 68, 68, 0.4);
+    color: rgba(255, 180, 180, 0.95);
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   RESPONSIVE — Mobile (Audience Phones)
+   ══════════════════════════════════════════════════════════════════════ */
+@media (max-width: 768px) {
+    .app {
+        padding: 10px;
+        gap: 10px;
+    }
+
+    .navbar {
+        flex-direction: column;
+        padding: 14px 16px;
+        gap: 12px;
+        border-radius: var(--radius-lg);
+    }
+
+    .nav-brand { width: 100%; justify-content: center; }
+    .nav-controls { width: 100%; justify-content: center; }
+    .nav-actions { width: 100%; justify-content: center; flex-wrap: wrap; }
+
+    .caption-panel {
+        border-radius: var(--radius-lg);
+    }
+
+    .captions-scroll {
+        padding: 24px 20px 16px;
+    }
+
+    .caption-line {
+        font-size: 1.2rem;
+    }
+
+    .caption-line.current {
+        font-size: 1.35rem;
+    }
+
+    .draft-text {
+        font-size: 1.1rem;
+    }
+
+    .latency-badge {
+        top: 12px;
+        right: 14px;
+        padding: 4px 10px;
+        font-size: 0.65rem;
+    }
+
+    .footer-bar {
+        border-radius: var(--radius-md);
+        padding: 8px 16px;
+    }
+
+    .footer-text {
+        font-size: 0.6rem;
+    }
+}
