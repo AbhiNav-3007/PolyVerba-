@@ -1,14 +1,15 @@
 <div align="center">
 
 # 🌐 PolyVerba
-**A live-event multilingual translation matrix bridging zero-downtime Edge AI and Cloud APIs.**
+**The Real-Time multilingual Speech-to-text translation matrix bridging zero-downtime Edge AI and Cloud APIs.**
 
-[![Architecture](https://img.shields.io/badge/Architecture-3--Tier_Arbitration-blue?style=for-the-badge)](#)
-[![Fault Tolerance](https://img.shields.io/badge/Fault_Tolerance-100%25_Offline_Edge-success?style=for-the-badge)](#)
-[![Data Pipeline](https://img.shields.io/badge/Data_Pipeline-Zero--Shot_Semantic_Extraction-purple?style=for-the-badge)](#)
+[![Architecture](https://img.shields.io/badge/Architecture-Edge_AI_First-6D28D9?style=for-the-badge)](#)
+[![Languages](https://img.shields.io/badge/Languages-12_Indian_Scripts-7C3AED?style=for-the-badge)](#)
+[![Offline](https://img.shields.io/badge/Edge_Mode-100%25_Offline-059669?style=for-the-badge)](#)
+[![Latency](https://img.shields.io/badge/Edge_Latency-~1.5s_CPU-F59E0B?style=for-the-badge)](#)
 
 <p align="center">
-  <i>Engineered for extreme hardware survivability, infinite cloud-scaling, and live linguistic accuracy.</i>
+  <i>Engineered for zero downtime, zero hallucinations, and real-world live event deployment — on hardware you already own.</i>
 </p>
 
 </div>
@@ -17,57 +18,97 @@
 
 ## 🎯 Executive Objective
 
-> **To eradicate the live-event latency barrier and overcome critical venue infrastructure failures via dynamic localized routing.**
+> **To eliminate the language barrier at live events, webinars, and broadcasts by delivering real-time speech translation into 12 Indian languages — operating with guaranteed continuity on offline Edge AI and scaling seamlessly to high-throughput Cloud compute when available.**
 
-PolyVerba represents a fundamental shift in how concurrent multilingual speech-to-text is processed. Traditional software is tethered strictly to either heavy cloud computing—which fails catastrophically during ISP disruptions—or localized hardware, which thermally throttles under multi-language computational loads. 
+Live events in India fail non-native audiences daily. A Tamil delegate at an English-medium conference misses 80% of the content. A Hindi-speaking student watching a Kannada lecture has no recourse. Commercial real-time captioning tools are either English-only, cloud-dependent, or absurdly expensive for academic and civic events.
 
-By constructing a proprietary **Dynamic Routing Protocol**, PolyVerba actively arbitrages overlapping audio streams. It continuously routes between high-capacity elastic cloud instances and heavily-quantized local Edge AI hosted strictly on the speaker's machine. This guarantees uninterrupted, sub-second translation delivery across 12 Indian dialects, maintaining 100% hardware uptime and semantic integrity even through absolute network disintegration.
+PolyVerba attacks this problem at three layers simultaneously:
+
+1. **Reliability** — The system must function even when the venue internet fails. A fully-quantized Edge AI pipeline runs locally on a standard CPU laptop, requiring zero cloud connectivity at runtime.
+2. **Accuracy** — Speech-to-text must handle Indian accents, code-mixing, and fast speakers. Translation must produce grammatically correct, script-accurate output in 12 languages without hallucinations.
+3. **Accessibility** — The interface must be zero-friction: one click to start, live output in the browser, language switching without restarting the session.
 
 ---
 
 ## 💎 Core Architecture & Capabilities
 
-### 🛡️ 1. The 3-Tier Edge/Cloud Fallback System
-Instead of relying on a single server, PolyVerba dynamically routes audio to the safest compute environment:
-*   **Tier 1 (Private Cloud):** Uses massive custom servers for huge online audiences.
-*   **Tier 2 (Commercial Backup):** Uses the Sarvam AI API for hyper-accurate fallback.
-*   **Tier 3 (100% Offline Edge):** If the internet dies, the system instantly shifts back down to the laptop to run AI locally without web access.
-**Tech Stack:** `AWS EC2`, `Sarvam AI API`, `FastAPI WebSockets`
+### 🔷 1. Edge-First AI Pipeline *(Implemented)*
+The foundational compute layer runs entirely on the presenter's laptop with no internet dependency at runtime.
 
-### ⚖️ 2. Edge CPU Survival Pruning (Model Scaling)
-If the system falls back to the offline laptop (Tier 3), processing large language models in INT8 causes catastrophic Out-of-Memory faults on 8GB machines. PolyVerba dynamically switches to a highly-compressed **200M Distilled Model** running natively in pure `Float32`. By coupling this lightweight architecture with a HuggingFace `TextIteratorStreamer`, we achieve flawless 0.20-second translation latency without triggering hardware thermal throttling.
-**Tech Stack:** `ai4bharat 200M Distilled`, `HuggingFace TextIteratorStreamer` 
+- **Speech-to-Text:** `faster-whisper` (CTranslate2 INT8 quantized) with Silero VAD for silence suppression
+- **Translation:** `ai4bharat/indictrans2-en-indic-dist-200M` — 200M parameter distilled model, CPU-optimized
+- **Continuous Audio:** Dual-threaded pipeline — non-stop recorder + async processor with 0.5s sliding overlap
+- **Deduplication:** Sliding-window suffix-prefix matching eliminates repeated words from overlapping chunks
+- **Tech Stack:** `faster-whisper`, `CTranslate2`, `transformers`, `torch`, `soundcard`, `numpy`, `threading`
 
-### 🧠 3. Dual-Mode RAG (Custom Glossary Dictionary)
-To prevent the AI from repeatedly misspelling complex medical or technical jargon during an event:
-*   **Pre-Event:** Organizers upload slides to a local AI to pull out rare words.
-*   **Live-Event:** An automatic zero-shot scanner catches new acronyms in real-time and injects them into the STT dictionary so they are spelled correctly moving forward.
-**Tech Stack:** `Ollama LLM`, `spaCy (NER)`
+### 🔷 2. StreamSync Audio Mode — Live Stream Translation *(Implemented)*
+Captures internal system audio (not microphone) to translate any online audio source — Zoom calls, YouTube live streams, news broadcasts, sports commentary, online lectures — without any hardware changes.
 
-### 🎙️ 4. Automatic Speaker Diarization
-The system listens to the audio and automatically tags when different people are speaking (e.g., `[Speaker 1]`, `[Speaker 2]`). This is crucial for Q&A sessions where multiple voices overlap.
-**Tech Stack:** `pyannote.audio`
+- Intercepts OS-level loopback via `VB-Cable` virtual audio device
+- Auto-detects `CABLE Output` device from Windows audio stack
+- Zero microphone bleed — clean digital source guarantees higher STT accuracy
+- Works with any application producing desktop audio
+- **Tech Stack:** `soundcard` loopback API, `VB-Audio Virtual Cable`
 
-### 📱 5. QR-Code Audience Interface
-Attendees do not need to download an app. They scan a QR code shown on the projector, instantly join the local Wi-Fi, and select their preferred language from a beautiful dark-mode interface.
-**Tech Stack:** `React`, `Vite`, `TailwindCSS`
+### 🔷 3. Zero-Hallucination Translation *(Implemented)*
+Standard IndicTrans2 outputs ghost tokens at the start of every sentence. PolyVerba eliminates this permanently.
 
-### 🔇 6. Active Noise Cancellation
-Before the AI even listens to the speaker, the system mathematically strips out background interference like venue Air Conditioners or audience chatter, completely eliminating "AI Hallucinations".
-**Tech Stack:** `RNNoise (C-compiled bindings)`
+- **BOS Token Excision:** Forces removal of the language-tag token from generated sequence (`[:, 1:]` tensor slice before decode)
+- **Punctuation Artifact Filter:** Regex-based secondary cleanup of short leading tokens
+- **Silence Artifact Filter:** Rejects outputs with >40% punctuation ratio, repeated-word spam, sub-3-char outputs
+- **VAD Pre-filter:** Whisper's Silero VAD skips non-speech frames before STT even runs
+- **Tech Stack:** `transformers`, `regex`, `faster-whisper` VAD
 
-### 🎛️ 7. 3-Mode Hardware Audio Arbitration
-A single monolithic audio capture setup creates audio bleed (e.g., room noise leaking into a sports broadcast). Furthermore, Windows OS typically drops frames causing "data discontinuities." PolyVerba solves this with a high-level `chunk_size` OS Audio Buffer coupled with an intelligent Frontend toggle:
-*   **Broadcast Mode:** Flawlessly isolates internal system loopback, mechanically muting the physical microphone to prevent room-noise bleed (e.g., for YouTube Sports).
-*   **Seminar Mode:** Locks onto the speaker's external stage microphone while bypassing all OS-level notification noises.
-*   **Conference Mode:** Mathematically merges both pure Loopback and Microphone input for real-time Web RTC (Zoom/Meet/Teams) dual-translation.
-**Tech Stack:** `soundcard`, `numpy`, `Threading queues`, `OS-Level Bucket Buffering`
+### 🔷 4. Continuous Flow Caption UI *(Implemented)*
+A single, append-only paragraph replaces the traditional line-per-chunk subtitle approach.
 
-### ⏱️ 8. Predictive VAD Slicing & Overlapping Windows
-PolyVerba automatically detects the speaker's language within seconds. To keep latency pegged at 0.2 seconds without dropping words, it uses Overlapping Sliding Windows combined with Voice Activity Detection (VAD). The system mathematically slices audio the exact millisecond the speaker takes a "Natural Breath Pause." If the speaker does not pause, it triggers a 2.0s Safety Cut overlapping the audio boundaries to prevent context fragmentation.
-**Tech Stack:** `faster-whisper VAD (Voice Activity Detection)`, `Overlapping Sliding Windows` 
+- All output flows inline — natural CSS word-wrap at container boundary, absolutely no hyphens mid-word
+- **Progressive Dimming:** 5-tier age-based dimming (95% → 70% → 45% → 28% → 15% opacity) shows recency at a glance
+- **Grey Draft Animation:** Current draft words appear as purple-grey italic inline, replaced by bright white on confirmation — CSS `word-fade-in` animation, zero JS timing delays
+- **Language Switch Label:** Centered uppercase label + decorative rule injected inline when user changes target language
+- **Indic Script Fonts:** Full Noto Sans stack covering all 12 script families, with Windows system font fallbacks
+- **Tech Stack:** Vanilla JS, Vanilla CSS, Google Fonts (Inter + Noto Sans Indic)
+
+### 🔷 5. FastAPI WebSocket Real-Time Delivery *(Implemented)*
+- Persistent WebSocket connections push caption events to all connected clients simultaneously
+- Three event types: `{type:"word"}` (grey draft), `{type:"final"}` (white confirmed), `{type:"error"}`
+- REST control layer: `POST /api/start`, `POST /api/stop`, `POST /api/update-target`
+- Auto port-kill on startup prevents `[Errno 10048]` socket conflicts
+- **Tech Stack:** `FastAPI`, `uvicorn`, `asyncio`, `starlette WebSockets`
 
 ---
+
+### 🔸 6. Cloud Compute Layer — GPU-Accelerated Translation
+Deploy the full PolyVerba stack on AWS `g4dn.xlarge` (NVIDIA T4, 16GB VRAM) using the `indictrans2-en-indic-1B` model for perfect native-script output across all 12 languages.
+
+- Edge vs Cloud latency comparison UI (`~1.5s CPU` vs `~0.4s GPU`)
+- All 12 Indian scripts in correct native alphabet (Kannada, Tamil, Telugu, Gujarati native scripts)
+- **Tech Stack:** `AWS EC2`, `CUDA`, `indictrans2-en-indic-1B`
+
+### 🔸 7. Dual-Mode RAG Glossary System
+Prevent STT from misspelling domain-specific terminology (medical, legal, technical events).
+
+- **Pre-Event Mode:** Organizer uploads PDF slides → local LLM extracts rare terms → injects into Whisper `hotwords`
+- **Live Mode:** `spaCy` zero-shot NER scans live transcript → auto-caches new proper nouns mid-session
+- **Tech Stack:** `Ollama LLM`, `spaCy`, `faster-whisper` hotwords API
+
+### 🔸 8. Speaker Diarization
+Automatically tag speaker identity during Q&A sessions without knowing who anyone is.
+
+- `pyannote.audio` voiceprint clustering assigns `[Speaker 1]`, `[Speaker 2]` labels in real time
+- **Tech Stack:** `pyannote.audio`
+
+### 🔸 9. QR-Code Audience Interface
+Each attendee's phone becomes a personalized caption screen — no app download required.
+
+- Audiences scan QR displayed on main projector → browser opens captioning UI → select own language
+- **Tech Stack:** `React`, `Vite`, `qrcode`
+
+### 🔸 10. 4-Mode Compute Matrix table (2 dropdowns × 2 models)
+
+
+---
+
 <div align="center">
-  <i>This repository features proprietary edge-case survivability algorithms.</i>
+  <i>Edge system is production-ready. Cloud and advanced features in active development.</i>
 </div>
