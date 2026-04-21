@@ -1,55 +1,70 @@
-import os
+"""
+PolyVerba - Whisper STT Engine (Faster-Whisper / CTranslate2)
+
+Returns word-level data so the frontend can animate words one-by-one.
+"""
+
 import time
 import numpy as np
 from faster_whisper import WhisperModel
 
+
 class WhisperEngine:
-    def __init__(self, model_size_or_path="large-v3", compute_type="int8", device="cpu"):
-        """
-        Initializes the STT Engine using Faster-Whisper.
-        
-        Using INT8 on the CPU aggressively shrinks the model's memory footprint
-        down to ~1.5GB to safely run on 8GB laptops without crashing Windows.
-        """
-        print(f"[STT INIT] Loading {model_size_or_path} model...")
-        print(f"[STT INIT] Hardware target: {device.upper()} running natively in {compute_type.upper()} precision.")
-        
+    def __init__(self, model_size_or_path="small", compute_type="int8", device="cpu"):
+        print(f"[STT] Loading faster-whisper '{model_size_or_path}' model...")
+        print(f"[STT] Device: {device.upper()} | Precision: {compute_type.upper()}")
+
         self.sample_rate = 16000
         start_time = time.time()
-        
-        try:
-            # We enforce CPU INT8 to prevent your 8GB Ryzen laptop from Out-of-Memory crashing.
-            self.model = WhisperModel(
-                model_size_or_path, 
-                device=device,
-                compute_type=compute_type
-            )
-            print(f"[STT INIT] Model loaded successfully in {time.time() - start_time:.2f} seconds!")
-        except Exception as e:
-            print(f"[STT ERROR] Failed to load model: {e}")
-            raise e
 
-    def transcribe_chunk(self, audio_array: np.ndarray, language=None) -> str:
+        self.model = WhisperModel(
+            model_size_or_path,
+            device=device,
+            compute_type=compute_type
+        )
+        print(f"[STT] Model loaded in {time.time() - start_time:.1f}s")
+
+    def transcribe_chunk(self, audio_array: np.ndarray, language=None):
         """
-        Takes a raw numpy float32 array (sliced directly from our AudioProcessor VAD)
-        and transcribes it instantly without writing to the hard drive.
+        Transcribes audio. Returns (full_text, words_list).
+        words_list is a list of word strings for word-by-word animation.
+
+        - vad_filter:   built-in Silero VAD, eliminates silence hallucinations
+        - beam_size=5:  top-5 beam search for 90%+ accuracy
+        - word_timestamps: get individual words for streaming animation
         """
         if len(audio_array) == 0:
-            return ""
+            return "", []
 
         try:
-            # We disable condition_on_previous_text. Live events are unpredictable.
-            # We want zero-shot transcription for absolute latency speed.
             segments, info = self.model.transcribe(
                 audio_array,
-                beam_size=1, # Lowest beam size = absolute fastest latency
+                beam_size=5,
                 language=language,
-                condition_on_previous_text=False
+                vad_filter=True,
+                vad_parameters=dict(
+                    min_silence_duration_ms=300,
+                    speech_pad_ms=200,
+                ),
+                word_timestamps=True,
+                condition_on_previous_text=False,
             )
-            
-            transcription = "".join([segment.text for segment in segments])
-            return transcription.strip()
-            
+
+            full_text = ""
+            words = []
+
+            for segment in segments:
+                # Skip segments that are likely silence/noise
+                if segment.no_speech_prob >= 0.5:
+                    continue
+                for word in segment.words:
+                    w = word.word.strip()
+                    if w:
+                        words.append(w)
+                        full_text += word.word
+
+            return full_text.strip(), words
+
         except Exception as e:
-            print(f"[STT TRANSCRIPTION ERROR] {e}")
-            return ""
+            print(f"[STT ERROR] {e}")
+            return "", []
