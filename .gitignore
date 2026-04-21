@@ -1,28 +1,41 @@
-﻿# Python Environment
+# ── Python Environment ────────────────────────────────────────────────────
 venv/
 __pycache__/
 *.pyc
+*.pyo
 .env
 .pytest_cache/
 
-# AI Models & Audio Cache (Huge files, never sync these)
+# ── AI Models & Large Files (Never commit — huge, machine-specific) ───────
 *.bin
 *.pt
+*.safetensors
+*.onnx
 *.wav
+*.mp3
+*.mp4
 audio_dump/
 temp_chunks/
 
-# React Frontend
-frontend/web/node_modules/
-frontend/web/dist/
-frontend/web/.env.local
+# ── Old / Replaced Folders (Dead code — not in active system) ────────────
+backend/
+frontend/
+audio/
+metrics/
+scratch/
 
-# IDEs & System
+# ── Node.js (old frontend experiment) ────────────────────────────────────
+node_modules/
+dist/
+*.lock
+
+# ── IDEs & System ─────────────────────────────────────────────────────────
 .vscode/
 .idea/
 .DS_Store
+Thumbs.db
 
-# Secret Hackathon Documents (Keep Local, Do Not Upload)
+# ── Secret Hackathon Documents (Keep Local, Do Not Upload) ───────────────
 implementation_plan.md
 hackathon_strategy.md
 hackathon_pitch_qa.md
