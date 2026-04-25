@@ -30,8 +30,14 @@ _BOS_ARTIFACT = re.compile(
 
 class IndicTransEngine:
     def __init__(self):
-        print("[TRANSLATION] Loading ai4bharat/indictrans2-en-indic-dist-200M...")
-        model_name = "ai4bharat/indictrans2-en-indic-dist-200M"
+        # Use 1B model on CUDA, 200M on CPU (for speed)
+        if torch.cuda.is_available():
+            model_name = "ai4bharat/indictrans2-en-indic-1B"
+            print("[TRANSLATION] Loading ai4bharat/indictrans2-en-indic-1B (GPU mode)...")
+        else:
+            model_name = "ai4bharat/indictrans2-en-indic-dist-200M"
+            print("[TRANSLATION] Loading ai4bharat/indictrans2-en-indic-dist-200M (CPU mode)...")
+        
         start = time.time()
 
         try:
@@ -41,9 +47,16 @@ class IndicTransEngine:
             self.model = AutoModelForSeq2SeqLM.from_pretrained(
                 model_name, trust_remote_code=True
             )
+            if torch.cuda.is_available():
+                self.model = self.model.to("cuda")
+                self.model.half()
+                print(f"[TRANSLATION] Model loaded in {time.time()-start:.1f}s")
+                print("[TRANSLATION] Device: CUDA (Float16)")
+            else:
+                self.model.eval()
+                print(f"[TRANSLATION] Model loaded in {time.time()-start:.1f}s")
+                print("[TRANSLATION] Device: CPU (Float32 Edge Mode)")
             self.model.eval()
-            print(f"[TRANSLATION] Model loaded in {time.time()-start:.1f}s")
-            print("[TRANSLATION] Device: CPU (Float32 Edge Mode)")
         except Exception as e:
             print(f"[TRANSLATION ERROR] Failed to load: {e}")
             raise
@@ -61,6 +74,7 @@ class IndicTransEngine:
         try:
             # IndicTransTokenizer._src_tokenize splits first 2 tokens as src/tgt lang
             tagged = f"{source_lang} {target_lang} {text.strip()}"
+            print(f"[TRANSLATE DEBUG] Tagged input: {tagged!r}")
 
             inputs = self.tokenizer(
                 tagged,
@@ -69,8 +83,15 @@ class IndicTransEngine:
                 truncation=True,
                 max_length=256
             )
+            print(f"[TRANSLATE DEBUG] Input tensor shape: {inputs['input_ids'].shape}")
+            
+            # Move inputs to same device as model
+            device = next(self.model.parameters()).device
+            inputs = {k: v.to(device) for k, v in inputs.items()}
+            print(f"[TRANSLATE DEBUG] Moved inputs to device: {device}")
 
             forced_bos = self.tokenizer.convert_tokens_to_ids(target_lang)
+            print(f"[TRANSLATE DEBUG] Target lang: {target_lang}, BOS token ID: {forced_bos}")
 
             with torch.no_grad():
                 gen = self.model.generate(
@@ -81,6 +102,7 @@ class IndicTransEngine:
                     num_beams=5,
                     forced_bos_token_id=forced_bos
                 )
+            print(f"[TRANSLATE DEBUG] Generated tokens shape: {gen.shape}")
 
             # Strip forced BOS token — it decodes to garbage chars like "छे," "आणि"
             out = gen[:, 1:]
@@ -90,10 +112,12 @@ class IndicTransEngine:
                 skip_special_tokens=True,
                 clean_up_tokenization_spaces=True
             )[0].strip()
+            print(f"[TRANSLATE DEBUG] Raw translation: {translation!r}")
 
             # Secondary cleanup: strip any residual 1-3 char artifact at the start
             # These look like "छे, " "कि " "से " "और " — short filler words from model
             translation = self._strip_leading_artifact(translation, target_lang)
+            print(f"[TRANSLATE DEBUG] After artifact strip: {translation!r}")
 
             return translation
 

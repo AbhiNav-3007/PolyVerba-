@@ -230,15 +230,27 @@ def _processor_thread(source_lang):
                 })
 
             else:
+                if not _trans_engine:
+                    print("[TRANSLATE ERROR] Translation engine not initialized!")
+                    result_queue.put({
+                        "type":    "final",
+                        "text":    unique_text,
+                        "latency": round(time.time() - chunk_start, 2)
+                    })
+                    continue
+                    
                 tgt_code   = FLORES_CODES.get(current_tgt, "hin_Deva")
+                print(f"[TRANSLATE] Input: {unique_text!r} → {current_tgt} ({tgt_code})")
                 translated = _trans_engine.translate(
                     unique_text,
                     target_lang=tgt_code,
                     source_lang="eng_Latn"
                 )
+                print(f"[TRANSLATE] Output: {translated!r}")
 
                 if not translated or len(translated.strip()) < 2:
                     # Fallback: show English if translation fails
+                    print(f"[TRANSLATE] WARNING: Empty/short translation. Falling back to English.")
                     result_queue.put({
                         "type":    "final",
                         "text":    unique_text,
