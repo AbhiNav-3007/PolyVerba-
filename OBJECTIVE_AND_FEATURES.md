@@ -78,33 +78,41 @@ A single, append-only paragraph replaces the traditional line-per-chunk subtitle
 
 ---
 
-### 🔸 6. Cloud Compute Layer — GPU-Accelerated Translation
+### 🔸 6. Universal Hardware Auto-Detection (CPU/GPU)
+Seamlessly supports both standard laptops and high-performance NVIDIA hardware without separate code branches.
+
+- Dynamically detects CUDA availability at runtime via `torch.cuda.is_available()`.
+- Auto-scales precision: uses `float16` in VRAM for GPU (~0.3s latency) or falls back to `int8` in RAM for CPU (~1.5s latency).
+- Ensures the exact same codebase runs flawlessly on a standard laptop or a dedicated heavy-compute workstation.
+- **Tech Stack:** `PyTorch`, `CUDA`, `faster-whisper`
+
+### 🔸 7. Cloud Compute Layer — GPU-Accelerated Translation
 Deploy the full PolyVerba stack on AWS `g4dn.xlarge` (NVIDIA T4, 16GB VRAM) using the `indictrans2-en-indic-1B` model for perfect native-script output across all 12 languages.
 
 - Edge vs Cloud latency comparison UI (`~1.5s CPU` vs `~0.4s GPU`)
 - All 12 Indian scripts in correct native alphabet (Kannada, Tamil, Telugu, Gujarati native scripts)
 - **Tech Stack:** `AWS EC2`, `CUDA`, `indictrans2-en-indic-1B`
 
-### 🔸 7. Dual-Mode RAG Glossary System
+### 🔸 8. Dual-Mode RAG Glossary System
 Prevent STT from misspelling domain-specific terminology (medical, legal, technical events).
 
 - **Pre-Event Mode:** Organizer uploads PDF slides → local LLM extracts rare terms → injects into Whisper `hotwords`
 - **Live Mode:** `spaCy` zero-shot NER scans live transcript → auto-caches new proper nouns mid-session
 - **Tech Stack:** `Ollama LLM`, `spaCy`, `faster-whisper` hotwords API
 
-### 🔸 8. Speaker Diarization
+### 🔸 9. Speaker Diarization
 Automatically tag speaker identity during Q&A sessions without knowing who anyone is.
 
 - `pyannote.audio` voiceprint clustering assigns `[Speaker 1]`, `[Speaker 2]` labels in real time
 - **Tech Stack:** `pyannote.audio`
 
-### 🔸 9. QR-Code Audience Interface
+### 🔸 10. QR-Code Audience Interface
 Each attendee's phone becomes a personalized caption screen — no app download required.
 
 - Audiences scan QR displayed on main projector → browser opens captioning UI → select own language
 - **Tech Stack:** `React`, `Vite`, `qrcode`
 
-### 🔸 10. 4-Mode Compute Matrix table (2 dropdowns × 2 models)
+### 🔸 11. 4-Mode Compute Matrix table (2 dropdowns × 2 models)
 
 
 ---
