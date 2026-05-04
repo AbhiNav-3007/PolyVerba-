@@ -115,10 +115,9 @@
                 <!-- Input Language (Model selector) -->
                 <div class="info-cell">
                     <span class="info-label">Input Language</span>
-                    <select id="model-select" class="lang-dropdown">
-                        <option value="base.en" selected>English Only  (faster)</option>
-                        <option value="small">Auto-Detect  (multilingual)</option>
-                    </select>
+                    <div class="model-badge" style="margin-top: 5px; background: rgba(255,255,255,0.1); width: fit-content;">
+                        <span style="font-size: 13px; color: #e2e8f0; font-weight: 500; padding: 2px 6px;">Auto-Optimized</span>
+                    </div>
                 </div>
                 <div class="nav-divider"></div>
                 <!-- Output / Translate To -->
@@ -137,7 +136,7 @@
                 <!-- Active model badge -->
                 <div class="model-badge" id="model-badge" title="Active Whisper model">
                     <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-                    <span id="model-badge-text">base.en</span>
+                    <span id="model-badge-text">base</span>
                 </div>
 
                 <!-- Connection Status -->
