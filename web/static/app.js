@@ -21,7 +21,6 @@
 let ws             = null;
 let isConnected    = false;
 let isStreaming    = false;
-let selectedModel  = 'base.en';
 let targetLang     = 'English';   // synced from dropdown on init
 
 let draftSpans     = [];          // current grey draft word spans
@@ -42,7 +41,6 @@ const captionsScroll= document.getElementById('captions-scroll');
 const btnStart      = document.getElementById('btn-start');
 const btnStop       = document.getElementById('btn-stop');
 const langSelect    = document.getElementById('lang-select');
-const modelSelect   = document.getElementById('model-select');
 const modelBadgeText= document.getElementById('model-badge-text');
 const statusDot     = document.getElementById('status-dot');
 const statusLabel   = document.getElementById('status-label');
@@ -146,7 +144,9 @@ function updateChunkAges() {
 
 function pruneOldChunks(maxChunks) {
     const chunks = Array.from(captionFlow.querySelectorAll('.chunk-confirmed'));
-    if (chunks.length > maxChunks) {
+    // Only prune when significantly over limit (by 20 words ≈ 1 full sentence)
+    // Drops in one batch → prevents constant word-by-word line-shifting jitter
+    if (chunks.length > maxChunks + 20) {
         chunks.slice(0, chunks.length - maxChunks).forEach(c => c.remove());
     }
 }
@@ -221,7 +221,6 @@ async function startCaption() {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 target_lang:  targetLang,
-                model:        selectedModel,
                 capture_mode: 'loopback'
             })
         });
@@ -230,8 +229,7 @@ async function startCaption() {
             isStreaming = false; updateButtons(); hideListening(); showWelcome();
             showToast('Failed: ' + (err.message || 'Unknown error'), 'error');
         } else {
-            const mLabel = selectedModel === 'base.en' ? 'EN-only' : 'Auto-detect';
-            showToast(`▶ ${mLabel} → ${targetLang}`, 'info');
+            showToast(`▶ Starting → ${targetLang}`, 'info');
         }
     } catch {
         isStreaming = false; updateButtons();
@@ -248,18 +246,6 @@ async function stopCaption() {
     showToast('⏹ Stopped', 'info');
     try { await fetch('/api/stop', { method: 'POST' }); } catch(e) { console.error(e); }
 }
-
-// ── Model selector ───────────────────────────────────────────────────────
-modelSelect.addEventListener('change', (e) => {
-    if (isStreaming) {
-        e.target.value = selectedModel;
-        showToast('Stop captioning first to change model', 'error');
-        return;
-    }
-    selectedModel = e.target.value;
-    if (modelBadgeText) modelBadgeText.textContent = selectedModel;
-    showToast(selectedModel === 'base.en' ? 'English Only (base.en)' : 'Auto-Detect (small)', 'info');
-});
 
 // ── Language selector ────────────────────────────────────────────────────
 langSelect.addEventListener('change', async (e) => {
@@ -327,9 +313,6 @@ function updateButtons() {
         : `<svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg> Start`;
     btnStop.disabled = !isStreaming;
     btnStop.classList.toggle('active', isStreaming);
-    modelSelect.disabled      = isStreaming;
-    modelSelect.style.opacity = isStreaming ? '0.45' : '1';
-    modelSelect.style.cursor  = isStreaming ? 'not-allowed' : 'pointer';
 }
 
 function updateLatency(s) {

@@ -103,8 +103,9 @@ async def start_transcription(data: dict):
     """Start the audio capture and translation pipeline."""
     target_lang  = data.get("target_lang", "Hindi")
     capture_mode = data.get("capture_mode", "loopback")
-    # Model is chosen by user: 'base.en' (English only, faster) or 'small' (auto-detect)
-    model = data.get("model", "base.en")
+
+    import torch
+    model = "medium" if torch.cuda.is_available() else "base.en"
 
     translate = (target_lang != "English")
 
@@ -204,6 +205,18 @@ if __name__ == "__main__":
     print("  Press Ctrl+C to stop the server")
     print("=" * 55)
     print()
+
+    import torch
+    _hw    = "GPU (CUDA)" if torch.cuda.is_available() else "CPU"
+    _model = "medium"     if torch.cuda.is_available() else "base.en"
+    print(f"[STARTUP] Hardware detected: {_hw}")
+    print(f"[STARTUP] Pre-loading Whisper '{_model}' + IndicTrans2 engines...")
+    try:
+        system_audio._ensure_engines(model_size=_model)
+        print(f"[STARTUP] Models ready on {_hw} — Start button is now instant!")
+    except Exception as e:
+        print(f"[STARTUP WARNING] Pre-load failed: {e} — models will load on first Start click.")
+
 
     try:
         uvicorn.run(app, host="0.0.0.0", port=8080)

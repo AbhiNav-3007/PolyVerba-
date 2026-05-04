@@ -3,6 +3,7 @@ PolyVerba - System Audio Pipeline
 
 Architecture: Two threads
   Thread 1 (Recorder)  — reads 0.1s micro-frames NON-STOP, never pauses
+                         Captures at 44100Hz (native), resamples to 16kHz
   Thread 2 (Processor) — every 2s takes a 2.5s snapshot (0.5s overlap),
                          translates first, then streams words in TARGET language
 
@@ -15,6 +16,7 @@ import queue
 import time
 import warnings
 import re
+import torch
 import numpy as np
 import collections
 
@@ -29,25 +31,25 @@ _proc_thread    = None
 _stt_engine     = None
 _trans_engine   = None
 _engines_loaded = False
-_loaded_model   = None
 _current_target = "English"   # default = English (no translation)
 _capture_mode   = "loopback"
+_on_gpu         = False       # set during engine load
 
-_audio_queue    = queue.Queue(maxsize=8)
+_audio_queue    = queue.Queue(maxsize=2)   # Reduced from 8 to 2 to completely eliminate latency backlog
 
 # ── Engine Loading ────────────────────────────────────────────────────────────
 
-def _ensure_engines(model_size="base.en"):
-    global _stt_engine, _trans_engine, _engines_loaded, _loaded_model
+def _ensure_engines(model_size="base"):
+    global _stt_engine, _trans_engine, _engines_loaded, _on_gpu
 
     from stt.whisper_engine import WhisperEngine
     from translation.indictrans_engine import IndicTransEngine
 
-    if _loaded_model != model_size:
-        print(f"\n[INIT] Loading Whisper '{model_size}' model...")
-        _stt_engine   = WhisperEngine(model_size_or_path=model_size,
-                                      compute_type="int8", device="cpu")
-        _loaded_model = model_size
+    # WhisperEngine auto-detects GPU internally and upgrades model to "medium" if CUDA
+    print(f"\n[INIT] Loading Whisper (requested: '{model_size}')...")
+    _stt_engine = WhisperEngine(model_size_or_path=model_size)
+    _on_gpu = torch.cuda.is_available()
+    print(f"[INIT] Hardware: {'GPU (CUDA)' if _on_gpu else 'CPU'}")
 
     if not _engines_loaded:
         print("[INIT] Loading IndicTrans2...")
@@ -74,42 +76,7 @@ def _get_loopback_device():
     return None, None
 
 
-# ── Thread 1: Continuous Recorder ─────────────────────────────────────────────
-
-def _recorder_thread(device, sample_rate, chunk_seconds, step_seconds):
-    global _running
-    MICRO   = 0.1
-    micro_n = int(sample_rate * MICRO)
-    maxlen  = int(sample_rate * (chunk_seconds + 1.0))
-    buf     = collections.deque(maxlen=maxlen)
-    last_push = time.time()
-
-    try:
-        with device.recorder(samplerate=sample_rate, channels=1) as rec:
-            print(f"[AUDIO] Recorder started — window={chunk_seconds}s  step={step_seconds}s")
-            while _running:
-                frame = rec.record(numframes=micro_n)
-                buf.extend(frame[:, 0].astype(np.float32))
-
-                now = time.time()
-                if now - last_push >= step_seconds and len(buf) >= int(sample_rate * chunk_seconds):
-                    snap = np.array(list(buf)[-int(sample_rate * chunk_seconds):])
-                    try:
-                        _audio_queue.put_nowait(snap)
-                    except queue.Full:
-                        try: _audio_queue.get_nowait()
-                        except: pass
-                        try: _audio_queue.put_nowait(snap)
-                        except: pass
-                    last_push = now
-    except Exception as e:
-        print(f"[RECORDER ERROR] {e}")
-    finally:
-        _running = False
-        print("[AUDIO] Recorder stopped.")
-
-
-# ── Hallucination Filter ──────────────────────────────────────────────────────
+# ── Hallucination Filter ───────────────────────────────────────────────────────
 
 _HALLUCINATION = re.compile(
     r"^(thanks for watching|thank you\.?|please subscribe|subtitles|"
@@ -123,20 +90,35 @@ def _is_hallucination(text: str) -> bool:
         return True
     if _HALLUCINATION.match(t):
         return True
-    # single word repeated 4+ times
     parts = t.split()
     if len(parts) >= 4 and len(set(parts)) == 1:
         return True
-    # Excessive punctuation/dots (e.g. Whisper silence artifacts like 'से.....')
-    # Count dots, ellipsis, hyphens, underscores
     punct_chars = sum(1 for c in t if c in '.-_•·…।')
     if len(t) > 3 and punct_chars / len(t) > 0.40:
         return True
-    # All characters are non-alphabetic (just symbols/numbers/spaces)
     alpha_chars = sum(1 for c in t if c.isalpha())
     if alpha_chars < 2:
         return True
     return False
+
+
+# ── Audio Resampling ────────────────────────────────────────────────────────────
+
+def _resample(audio: np.ndarray, from_rate: int, to_rate: int) -> np.ndarray:
+    """High-quality resample using scipy anti-aliasing filter."""
+    if from_rate == to_rate:
+        return audio
+    try:
+        from scipy.signal import resample_poly
+        from math import gcd
+        g = gcd(from_rate, to_rate)
+        return resample_poly(audio, to_rate // g, from_rate // g)
+    except ImportError:
+        # Fallback: naive decimation (less ideal but works)
+        step = from_rate / to_rate
+        indices = np.arange(0, len(audio), step).astype(int)
+        indices = indices[indices < len(audio)]
+        return audio[indices]
 
 
 # ── Deduplication (overlap window) ───────────────────────────────────────────
@@ -152,13 +134,52 @@ def _deduplicate(current_words, prev_words, max_overlap=5):
     return current_words
 
 
+# ── Thread 1: Continuous Recorder ─────────────────────────────────────────────
+
+def _recorder_thread(device, capture_rate, chunk_seconds, step_seconds):
+    global _running
+    MICRO   = 0.1
+    micro_n = int(capture_rate * MICRO)
+    maxlen  = int(capture_rate * (chunk_seconds + 1.0))
+    buf     = collections.deque(maxlen=maxlen)
+    last_push = time.time()
+
+    TARGET_RATE = 16000
+
+    try:
+        with device.recorder(samplerate=capture_rate, channels=1) as rec:
+            print(f"[AUDIO] Recorder started — capture={capture_rate}Hz → resample to {TARGET_RATE}Hz")
+            print(f"[AUDIO] Window: {chunk_seconds}s | Step: {step_seconds}s | Overlap: {chunk_seconds-step_seconds:.1f}s")
+            
+            while _running:
+                frame = rec.record(numframes=micro_n)
+                buf.extend(frame[:, 0].astype(np.float32))
+
+                now = time.time()
+                if now - last_push >= step_seconds and len(buf) >= int(capture_rate * chunk_seconds):
+                    snap_raw = np.array(list(buf)[-int(capture_rate * chunk_seconds):])
+                    snap_16k = _resample(snap_raw, capture_rate, TARGET_RATE)
+                    
+                    try:
+                        _audio_queue.put_nowait(snap_16k)
+                    except queue.Full:
+                        try: _audio_queue.get_nowait()
+                        except: pass
+                        try: _audio_queue.put_nowait(snap_16k)
+                        except: pass
+                    last_push = now
+    except Exception as e:
+        print(f"[RECORDER ERROR] {e}")
+    finally:
+        _running = False
+        print("[AUDIO] Recorder stopped.")
+
+
 # ── Thread 2: STT + Translation Processor ─────────────────────────────────────
 
 def _processor_thread(source_lang):
     """
     Main pipeline loop.
-    IMPORTANT: words from whisper_engine.transcribe_chunk() are plain STRINGS
-               (not Word objects). The engine already extracts .word text.
     """
     global _running, _current_target
     from stt.translate import FLORES_CODES
@@ -230,11 +251,25 @@ def _processor_thread(source_lang):
                 })
 
             else:
-                tgt_code   = FLORES_CODES.get(current_tgt, "hin_Deva")
+                tgt_code = FLORES_CODES.get(current_tgt, "hin_Deva")
+                src_code = FLORES_CODES.get("English", "eng_Latn")
+
+                # Determine correct source FLORES code for non-English source
+                if source_lang not in ("en", "auto", None):
+                    from stt.translate import FLORES_TO_NAME, INDIC_SOURCE_CODES
+                    _lang_map = {
+                        "hi": "hin_Deva", "ta": "tam_Taml", "te": "tel_Telu",
+                        "kn": "kan_Knda", "ml": "mal_Mlym", "mr": "mar_Deva",
+                        "bn": "ben_Beng", "gu": "guj_Gujr", "pa": "pan_Guru",
+                        "ur": "urd_Arab", "as": "asm_Beng", "ne": "npi_Deva",
+                        "or": "ory_Orya",
+                    }
+                    src_code = _lang_map.get(source_lang, "eng_Latn")
+
                 translated = _trans_engine.translate(
                     unique_text,
                     target_lang=tgt_code,
-                    source_lang="eng_Latn"
+                    source_lang=src_code
                 )
 
                 if not translated or len(translated.strip()) < 2:
@@ -247,6 +282,12 @@ def _processor_thread(source_lang):
                     continue
 
                 # Stream translated words as grey, then push white final
+                # Clean emergency "छे" word filter
+                filtered = [w for w in translated.split() if not w.startswith("छे")]
+                translated = " ".join(filtered).strip()
+                if not translated:
+                    continue
+
                 _stream_words(translated.split(), delay=0.08)
                 result_queue.put({
                     "type":    "final",
@@ -258,13 +299,19 @@ def _processor_thread(source_lang):
             print(f"[PROCESS ERROR] {e}")
             import traceback; traceback.print_exc()
             continue   # skip this chunk, keep the thread alive
+            
+        # ── VRAM Anti-Fragmentation Cleanup ──────────────────────────────
+        if _on_gpu:
+            try:
+                torch.cuda.empty_cache()
+            except Exception:
+                pass
 
     print("[AUDIO] Processor stopped.")
 
 
-def _stream_words(words, delay=0.03):
-    """Push words rapidly. 30ms delay is enough to let CSS word-fade-in animate
-    visually without building a latency backlog (was 80ms which caused stalling)."""
+def _stream_words(words, delay=0.06):
+    """Push words rapidly for word-by-word fade-in animation."""
     for w in words:
         if not _running:
             break
@@ -277,7 +324,7 @@ def _stream_words(words, delay=0.03):
 # ── Public API ─────────────────────────────────────────────────────────────────
 
 def start_transcription(source_lang="en", target_lang="English",
-                        model="base.en", translate=True, capture_mode="loopback"):
+                        model="base", translate=True, capture_mode="loopback"):
     global _running, _rec_thread, _proc_thread, _capture_mode, _current_target
 
     if _running:
@@ -306,25 +353,25 @@ def start_transcription(source_lang="en", target_lang="English",
             device = sc.default_microphone()
             label  = f"Mic ({device.name})"
 
-        SAMPLE_RATE   = 16000
+        CAPTURE_RATE  = 44100
         CHUNK_SECONDS = 2.5
         STEP_SECONDS  = 2.0
 
         print(f"[AUDIO] Device: {label}")
-        print(f"[AUDIO] Window: {CHUNK_SECONDS}s | Step: {STEP_SECONDS}s | Overlap: {CHUNK_SECONDS-STEP_SECONDS:.1f}s")
 
         def _com_recorder():
             try:
                 import pythoncom; pythoncom.CoInitialize()
             except ImportError:
                 pass
-            _recorder_thread(device, SAMPLE_RATE, CHUNK_SECONDS, STEP_SECONDS)
+            _recorder_thread(device, CAPTURE_RATE, CHUNK_SECONDS, STEP_SECONDS)
             try:
                 import pythoncom; pythoncom.CoUninitialize()
             except ImportError:
                 pass
 
-        _rec_thread  = threading.Thread(target=_com_recorder, daemon=True, name="PolyVerba-Recorder")
+        _rec_thread  = threading.Thread(target=_com_recorder,
+                                        daemon=True, name="PolyVerba-Recorder")
         _proc_thread = threading.Thread(target=_processor_thread, args=(source_lang,),
                                         daemon=True, name="PolyVerba-Processor")
         _rec_thread.start()
