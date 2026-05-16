@@ -31,9 +31,9 @@ _proc_thread    = None
 _stt_engine     = None
 _trans_engine   = None
 _engines_loaded = False
-_current_target = "English"   # default = English (no translation)
+_active_languages = set()             # dynamically updated by WebSocket clients
 _capture_mode   = "loopback"
-_on_gpu         = False       # set during engine load
+_on_gpu         = False               # set during engine load
 
 _audio_queue    = queue.Queue(maxsize=2)   # Reduced from 8 to 2 to completely eliminate latency backlog
 
@@ -43,7 +43,7 @@ def _ensure_engines(model_size="base"):
     global _stt_engine, _trans_engine, _engines_loaded, _on_gpu
 
     from stt.whisper_engine import WhisperEngine
-    from translation.indictrans_engine import IndicTransEngine
+    from translation.nllb_engine import NLLBEngine
 
     # WhisperEngine auto-detects GPU internally and upgrades model to "medium" if CUDA
     print(f"\n[INIT] Loading Whisper (requested: '{model_size}')...")
@@ -52,8 +52,8 @@ def _ensure_engines(model_size="base"):
     print(f"[INIT] Hardware: {'GPU (CUDA)' if _on_gpu else 'CPU'}")
 
     if not _engines_loaded:
-        print("[INIT] Loading IndicTrans2...")
-        _trans_engine = IndicTransEngine()
+        print("[INIT] Loading Meta NLLB-600M...")
+        _trans_engine = NLLBEngine()
 
     _engines_loaded = True
     print("[INIT] Engines ready!\n")
@@ -181,7 +181,7 @@ def _processor_thread(source_lang):
     """
     Main pipeline loop.
     """
-    global _running, _current_target
+    global _running, _active_languages
     from stt.translate import FLORES_CODES
 
     prev_words = []   # list of strings from previous chunk (for deduplication)
@@ -202,7 +202,7 @@ def _processor_thread(source_lang):
         try:
             lang_hint  = source_lang if source_lang not in ("auto", None, "en") else None
             full_text, word_strings = _stt_engine.transcribe_chunk(
-                audio, language=lang_hint
+                audio, language=lang_hint, capture_mode=_capture_mode
             )
             # word_strings: list[str]  e.g. ["Hello,", "how", "are", "you?"]
         except Exception as e:
@@ -237,26 +237,23 @@ def _processor_thread(source_lang):
         if len(unique_text) < 3:
             continue
 
-        # ── 3. Translate then stream in TARGET language ───────────────────
+        # ── 3. Translate to all active languages (Multicast) ──────────────
         try:
-            current_tgt = _current_target   # read live (can change mid-stream)
+            active_langs = list(_active_languages)
+            if not active_langs:
+                active_langs = ["English (Latin)"]
+                
+            # Limit to 4 languages simultaneously to prevent CPU overload
+            active_langs = active_langs[:4]
 
-            if current_tgt == "English":
-                # No translation needed — stream English words as grey
-                _stream_words(deduped_words, delay=0.09)
-                result_queue.put({
-                    "type":    "final",
-                    "text":    unique_text,
-                    "latency": round(time.time() - chunk_start, 2)
-                })
+            translations = {}
+            need_translation = [l for l in active_langs if l != "English (Latin)"]
 
-            else:
-                tgt_code = FLORES_CODES.get(current_tgt, "hin_Deva")
-                src_code = FLORES_CODES.get("English", "eng_Latn")
-
+            if need_translation:
                 # Determine correct source FLORES code for non-English source
+                src_code = FLORES_CODES.get("English (Latin)", "eng_Latn")
                 if source_lang not in ("en", "auto", None):
-                    from stt.translate import FLORES_TO_NAME, INDIC_SOURCE_CODES
+                    from stt.translate import INDIC_SOURCE_CODES
                     _lang_map = {
                         "hi": "hin_Deva", "ta": "tam_Taml", "te": "tel_Telu",
                         "kn": "kan_Knda", "ml": "mal_Mlym", "mr": "mar_Deva",
@@ -266,34 +263,34 @@ def _processor_thread(source_lang):
                     }
                     src_code = _lang_map.get(source_lang, "eng_Latn")
 
-                translated = _trans_engine.translate(
-                    unique_text,
-                    target_lang=tgt_code,
-                    source_lang=src_code
-                )
+                for target_lang in need_translation:
+                    tgt_code = FLORES_CODES.get(target_lang, "hin_Deva")
+                    # Run full sentence translation directly instead of stream to save complex thread sync
+                    # NLLB is fast enough for 2-second chunks.
+                    trans_text = _trans_engine.translate(
+                        unique_text,
+                        target_lang=tgt_code,
+                        source_lang=src_code
+                    )
+                    if trans_text and not trans_text.startswith("छे"):
+                        translations[target_lang] = trans_text
+            
+            # AI Latency (Whisper time + NLLB time), ignores UI animation delay
+            final_latency = round(time.time() - chunk_start, 2)
 
-                if not translated or len(translated.strip()) < 2:
-                    # Fallback: show English if translation fails
-                    result_queue.put({
-                        "type":    "final",
-                        "text":    unique_text,
-                        "latency": round(time.time() - chunk_start, 2)
-                    })
-                    continue
+            # Stream English words for grey word animation — only if an English
+            # subscriber is actually connected (skip delay if no English clients)
+            eng_active = "English (Latin)" in active_langs
+            if eng_active:
+                _stream_words(deduped_words, delay=0.04)
 
-                # Stream translated words as grey, then push white final
-                # Clean emergency "छे" word filter
-                filtered = [w for w in translated.split() if not w.startswith("छे")]
-                translated = " ".join(filtered).strip()
-                if not translated:
-                    continue
-
-                _stream_words(translated.split(), delay=0.08)
-                result_queue.put({
-                    "type":    "final",
-                    "text":    translated.strip(),
-                    "latency": round(time.time() - chunk_start, 2)
-                })
+            result_queue.put({
+                "type": "multicast",
+                "is_final": True,
+                "original": unique_text,
+                "translations": translations,
+                "latency": final_latency
+            })
 
         except Exception as e:
             print(f"[PROCESS ERROR] {e}")
@@ -310,8 +307,8 @@ def _processor_thread(source_lang):
     print("[AUDIO] Processor stopped.")
 
 
-def _stream_words(words, delay=0.06):
-    """Push words rapidly for word-by-word fade-in animation."""
+def _stream_words(words, delay=0.04):
+    """Push words rapidly for word-by-word fade-in animation (English only)."""
     for w in words:
         if not _running:
             break
@@ -323,17 +320,16 @@ def _stream_words(words, delay=0.06):
 
 # ── Public API ─────────────────────────────────────────────────────────────────
 
-def start_transcription(source_lang="en", target_lang="English",
+def start_transcription(source_lang="en", target_lang="English (Latin)",
                         model="base", translate=True, capture_mode="loopback"):
-    global _running, _rec_thread, _proc_thread, _capture_mode, _current_target
+    global _running, _rec_thread, _proc_thread, _capture_mode
 
     if _running:
         return False
 
     try:
         _ensure_engines(model)
-        _capture_mode   = capture_mode
-        _current_target = target_lang
+        _capture_mode = capture_mode
 
         # Clear stale audio
         while not _audio_queue.empty():
@@ -354,8 +350,8 @@ def start_transcription(source_lang="en", target_lang="English",
             label  = f"Mic ({device.name})"
 
         CAPTURE_RATE  = 44100
-        CHUNK_SECONDS = 2.5
-        STEP_SECONDS  = 2.0
+        CHUNK_SECONDS = 2.0
+        STEP_SECONDS  = 1.3
 
         print(f"[AUDIO] Device: {label}")
 
@@ -392,10 +388,10 @@ def stop_transcription():
     except: pass
 
 
-def update_target(lang_name):
-    global _current_target
-    _current_target = lang_name
-    print(f"[TARGET] Switched to: {lang_name}")
+def update_active_languages(langs):
+    global _active_languages
+    _active_languages = set(langs)
+    print(f"[MULTICAST] Active languages updated: {list(_active_languages)}")
 
 
 def is_running():

@@ -33,6 +33,7 @@ from stt.translate import FLORES_CODES, LANGUAGE_NAMES
 
 # Track all connected WebSocket clients
 connected_clients = set()
+active_subscriptions = {} # Maps websocket -> target language
 
 
 async def broadcast_captions():
@@ -45,16 +46,43 @@ async def broadcast_captions():
             while not system_audio.result_queue.empty():
                 message = system_audio.result_queue.get_nowait()
 
-                # Send to all connected clients
                 to_remove = set()
                 for client in list(connected_clients):
                     try:
-                        await client.send_json(message)
+                        target = active_subscriptions.get(client, "English (Latin)")
+                        if message.get("type") == "error":
+                            payload = message
+                        elif message.get("type") == "word":
+                            # Streaming words (mostly for English)
+                            if target == "English (Latin)":
+                                payload = message
+                            else:
+                                continue # Skip sending English grey words to translated viewers
+                        else:
+                            # It's a final multicast payload
+                            if target == "English (Latin)":
+                                text = message.get("original", "")
+                            else:
+                                trans_dict = message.get("translations", {})
+                                text = trans_dict.get(target, message.get("original", ""))
+                                
+                            payload = {
+                                "type": "final",
+                                "text": text,
+                                "latency": message.get("latency")
+                            }
+                            
+                        await client.send_json(payload)
                     except Exception:
                         to_remove.add(client)
 
                 # Clean up dead connections
                 connected_clients.difference_update(to_remove)
+                for c in to_remove:
+                    active_subscriptions.pop(c, None)
+                    
+                if to_remove:
+                    system_audio.update_active_languages(set(active_subscriptions.values()))
 
             await asyncio.sleep(0.05)  # 50ms poll interval
         except Exception as e:
@@ -107,7 +135,7 @@ async def start_transcription(data: dict):
     import torch
     model = "medium" if torch.cuda.is_available() else "base.en"
 
-    translate = (target_lang != "English")
+    translate = (target_lang != "English (Latin)")
 
     success = system_audio.start_transcription(
         source_lang="en",
@@ -135,10 +163,8 @@ async def stop_transcription():
 
 @app.post("/api/update-target")
 async def update_target(data: dict):
-    """Switch the target language mid-stream without restarting."""
-    target_lang = data.get("target_lang", "Hindi")
-    system_audio.update_target(target_lang)
-    return {"status": "updated", "target": target_lang}
+    # This endpoint is deprecated in Multicast mode, as clients subscribe directly via WebSocket.
+    return {"status": "ignored_in_multicast"}
 
 
 @app.get("/api/status")
@@ -146,7 +172,7 @@ async def get_status():
     """Check if the pipeline is currently active."""
     return {
         "running": system_audio.is_running(),
-        "target": system_audio._current_target,
+        "active_languages": list(system_audio._active_languages),
         "capture_mode": system_audio.get_capture_mode()
     }
 
@@ -158,14 +184,24 @@ async def websocket_endpoint(websocket: WebSocket):
     """Accept WebSocket connections from browser clients."""
     await websocket.accept()
     connected_clients.add(websocket)
+    active_subscriptions[websocket] = "English (Latin)"
+    system_audio.update_active_languages(set(active_subscriptions.values()))
+    
     print(f"[WS] Client connected. Active: {len(connected_clients)}")
     try:
         while True:
-            await asyncio.sleep(1)
+            data = await websocket.receive_json()
+            if data.get("type") == "subscribe":
+                lang = data.get("language", "English (Latin)")
+                active_subscriptions[websocket] = lang
+                system_audio.update_active_languages(set(active_subscriptions.values()))
+                print(f"[WS] Client subscribed to {lang}")
     except Exception:
         pass
     finally:
         connected_clients.discard(websocket)
+        active_subscriptions.pop(websocket, None)
+        system_audio.update_active_languages(set(active_subscriptions.values()))
         print(f"[WS] Client disconnected. Active: {len(connected_clients)}")
 
 
@@ -210,7 +246,7 @@ if __name__ == "__main__":
     _hw    = "GPU (CUDA)" if torch.cuda.is_available() else "CPU"
     _model = "medium"     if torch.cuda.is_available() else "base.en"
     print(f"[STARTUP] Hardware detected: {_hw}")
-    print(f"[STARTUP] Pre-loading Whisper '{_model}' + IndicTrans2 engines...")
+    print(f"[STARTUP] Pre-loading Whisper '{_model}' + Meta NLLB-600M engines...")
     try:
         system_audio._ensure_engines(model_size=_model)
         print(f"[STARTUP] Models ready on {_hw} — Start button is now instant!")

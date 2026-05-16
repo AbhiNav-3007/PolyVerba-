@@ -15,11 +15,11 @@ pydantic==2.12.5
 faster-whisper==1.2.1
 ctranslate2==4.7.1
 
-# ── Translation: IndicTrans2 ────────────────────────────────────────────────
+# ── Translation: Meta NLLB-600M via CTranslate2 ────────────────────────────
+# ctranslate2 already installed above (used by faster-whisper too)
 transformers==4.37.2
 torch==2.11.0
 sentencepiece==0.2.1
-sacremoses==0.1.1
 tokenizers==0.15.2
 safetensors==0.7.0
 huggingface_hub==0.36.2

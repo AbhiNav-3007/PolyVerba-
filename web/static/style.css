@@ -819,3 +819,137 @@ html, body {
         font-size: 0.6rem;
     }
 }
+
+.speaker-tag { font-weight: bold; color: #a855f7; margin-right: 0.5rem; }
+
+/* ══════════════════════════════════════════════════════════════════════════
+   MOBILE VIEWER CONTROL BAR
+   Fixed floating bar at the bottom of the screen — only shown on viewer phones.
+   Gives audience: language selector + local pause/resume buttons.
+   ══════════════════════════════════════════════════════════════════════ */
+.mobile-viewer-bar {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    z-index: 100;
+    padding: 12px 20px 20px;   /* extra bottom padding for phone home indicator */
+    border-radius: var(--radius-xl) var(--radius-xl) 0 0;
+    border-bottom: none;
+    animation: slide-up 0.4s cubic-bezier(0.22, 0.8, 0.4, 1) both;
+}
+
+@keyframes slide-up {
+    from { transform: translateY(100%); opacity: 0; }
+    to   { transform: translateY(0);    opacity: 1; }
+}
+
+.mobile-viewer-inner {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    max-width: 480px;
+    margin: 0 auto;
+}
+
+/* Language section */
+.mobile-lang-wrap {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    flex: 1;
+}
+
+.mobile-label {
+    font-size: 0.58rem;
+    font-weight: 700;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--purple-500);
+}
+
+.mobile-lang-dropdown {
+    background: transparent;
+    border: none;
+    color: rgba(196, 167, 255, 0.95);
+    font-family: var(--font);
+    font-size: 1rem;
+    font-weight: 700;
+    cursor: pointer;
+    outline: none;
+    padding: 2px 0;
+    width: 100%;
+    max-width: 200px;
+}
+
+.mobile-lang-dropdown option {
+    background: #1a1030;
+    color: white;
+}
+
+/* Button group */
+.mobile-btn-wrap {
+    display: flex;
+    gap: 10px;
+    flex-shrink: 0;
+}
+
+.mobile-btn {
+    display: inline-flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    padding: 10px 18px;
+    border-radius: var(--radius-md);
+    border: 1px solid transparent;
+    font-family: var(--font);
+    font-size: 0.68rem;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.22s ease;
+    letter-spacing: 0.04em;
+    min-width: 60px;
+}
+
+.mobile-btn:disabled {
+    opacity: 0.35;
+    cursor: not-allowed;
+}
+
+.mobile-btn-play {
+    background: linear-gradient(135deg, var(--purple-600), var(--indigo-600));
+    color: white;
+    box-shadow: var(--glow-start);
+}
+
+.mobile-btn-play:hover:not(:disabled) {
+    box-shadow: 0 0 28px rgba(124, 58, 237, 0.7);
+    transform: translateY(-1px);
+}
+
+.mobile-btn-pause {
+    background: rgba(255, 255, 255, 0.06);
+    color: var(--text-muted);
+    border-color: rgba(255, 255, 255, 0.08);
+}
+
+.mobile-btn-pause.active-pause {
+    background: var(--red-500);
+    color: white;
+    border-color: rgba(239, 68, 68, 0.5);
+    box-shadow: var(--glow-stop);
+    opacity: 1;
+}
+
+.mobile-btn-pause.active-pause:hover {
+    background: #dc2626;
+    transform: translateY(-1px);
+}
+
+/* Push main caption panel up when mobile bar is visible */
+body.viewer-mode .app {
+    padding-bottom: 90px;
+}
+
