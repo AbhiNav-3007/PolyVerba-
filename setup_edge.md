@@ -2,7 +2,7 @@
 
 PolyVerba runs on any Windows laptop. The **same codebase** auto-detects your hardware and selects the best configuration automatically — no manual code edits needed per machine.
 
-| Hardware | Whisper Model | IndicTrans2 Model | Expected Latency |
+| Hardware | Whisper Model | Meta NLLB-600M Model | Expected Latency |
 |---|---|---|---|
 | CPU (any laptop) | `base` (multilingual, int8) | `en-indic dist-200M` | ~1.2s |
 | NVIDIA GPU (CUDA) | `medium` (float16) | `en-indic 1B` + `indic-en` + `indic-indic` | ~0.6s |
@@ -184,13 +184,13 @@ Open your browser and go to: **http://localhost:8080**
 The server will print which hardware it detected and which models it loaded:
 ```
 [STARTUP] Hardware detected: GPU (CUDA)
-[STARTUP] Pre-loading Whisper 'medium' + IndicTrans2 engines...
+[STARTUP] Pre-loading Whisper 'medium' + Meta NLLB-600M engines...
 [STARTUP] Models ready on GPU (CUDA) — Start button is now instant!
 ```
 or on CPU:
 ```
 [STARTUP] Hardware detected: CPU
-[STARTUP] Pre-loading Whisper 'base' + IndicTrans2 engines...
+[STARTUP] Pre-loading Whisper 'base' + Meta NLLB-600M engines...
 [STARTUP] Models ready on CPU — Start button is now instant!
 ```
 

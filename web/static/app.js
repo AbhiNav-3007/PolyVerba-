@@ -21,7 +21,9 @@
 let ws             = null;
 let isConnected    = false;
 let isStreaming    = false;
-let targetLang     = 'English';   // synced from dropdown on init
+let targetLang     = 'English (Latin)';   // synced from dropdown on init
+
+const isHost       = location.hostname === 'localhost' || location.hostname === '127.0.0.1';
 
 let draftSpans     = [];          // current grey draft word spans
 let confirmedCount = 0;           // number of confirmed chunks in flow
@@ -41,6 +43,7 @@ const captionsScroll= document.getElementById('captions-scroll');
 const btnStart      = document.getElementById('btn-start');
 const btnStop       = document.getElementById('btn-stop');
 const langSelect    = document.getElementById('lang-select');
+const sourceSelect  = document.getElementById('source-select');
 const modelBadgeText= document.getElementById('model-badge-text');
 const statusDot     = document.getElementById('status-dot');
 const statusLabel   = document.getElementById('status-label');
@@ -53,7 +56,12 @@ const latencyValue  = document.getElementById('latency-value');
 function connectWebSocket() {
     const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
     ws = new WebSocket(`${proto}//${location.host}/ws/captions`);
-    ws.onopen  = () => { isConnected = true;  updateConnectionUI(); updateButtons(); };
+    ws.onopen  = () => {
+        isConnected = true;
+        updateConnectionUI();
+        updateButtons();
+        ws.send(JSON.stringify({ type: 'subscribe', language: targetLang }));
+    };
     ws.onclose = () => { isConnected = false; updateConnectionUI(); updateButtons(); setTimeout(connectWebSocket, 3000); };
     ws.onerror = () => {};
     ws.onmessage = (ev) => {
@@ -66,6 +74,8 @@ function connectWebSocket() {
 //  MESSAGE HANDLING
 // ═══════════════════════════════════════════════════════════════════════════
 
+let _wordAnimTimer = null;  // timer handle for current word animation
+
 function handleMessage(msg) {
     if (msg.type === 'word') {
         hideWelcome();
@@ -73,12 +83,53 @@ function handleMessage(msg) {
         appendWord(msg.text);
     } else if (msg.type === 'final') {
         hideWelcome();
-        confirmChunk(msg.text, msg.latency);
+        if (targetLang === 'English (Latin)') {
+            // English: server already streamed grey words; just confirm the chunk
+            confirmChunk(msg.text, msg.latency);
+        } else {
+            // Translated language: server sends full sentence at once.
+            // Animate it word-by-word on the client so we get the same grey→white effect.
+            animateTranslatedWords(msg.text, msg.latency);
+        }
     } else if (msg.type === 'error') {
         showToast(msg.text, 'error');
         isStreaming = false;
         updateButtons();
     }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  TRANSLATED WORD ANIMATION (client-side grey → white for non-English)
+// ═══════════════════════════════════════════════════════════════════════════
+
+function animateTranslatedWords(text, latency) {
+    if (!text || !text.trim()) return;
+
+    // Cancel any previous animation that hasn't finished yet
+    if (_wordAnimTimer !== null) {
+        clearTimeout(_wordAnimTimer);
+        _wordAnimTimer = null;
+        // Immediately clear leftover draft words from previous chunk
+        draftSpans.forEach(s => s.remove());
+        draftSpans = [];
+    }
+
+    const words = text.trim().split(/\s+/);
+    let i = 0;
+
+    function showNext() {
+        if (!isStreaming) return;   // stopped mid-animation
+        if (i < words.length) {
+            hideListening();
+            appendWord(words[i]);
+            i++;
+            _wordAnimTimer = setTimeout(showNext, 40);
+        } else {
+            _wordAnimTimer = null;
+            confirmChunk(text, latency);
+        }
+    }
+    showNext();
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -215,13 +266,16 @@ async function startCaption() {
     updateButtons();
     showListening();
 
+    if (!isHost) return; // Viewers cannot start the server
+
     try {
+        const captureMode = sourceSelect ? sourceSelect.value : 'loopback';
         const res = await fetch('/api/start', {
             method:  'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 target_lang:  targetLang,
-                capture_mode: 'loopback'
+                capture_mode: captureMode
             })
         });
         if (!res.ok) {
@@ -238,6 +292,8 @@ async function startCaption() {
 }
 
 async function stopCaption() {
+    if (!isHost) return;
+    
     isStreaming = false;
     draftSpans.forEach(s => s.remove());
     draftSpans = [];
@@ -252,7 +308,7 @@ langSelect.addEventListener('change', async (e) => {
     const prev = targetLang;
     targetLang = e.target.value;
 
-    if (targetLang === 'English') {
+    if (targetLang === 'English (Latin)') {
         showToast('Showing original English — no translation', 'info');
     } else {
         showToast(`Translating to ${targetLang}`, 'info');
@@ -266,7 +322,7 @@ langSelect.addEventListener('change', async (e) => {
 
         const marker = document.createElement('div');
         marker.className = 'flow-lang-switch';
-        if (targetLang === 'English') {
+        if (targetLang === 'English (Latin)') {
             marker.textContent = '\u2014 Back to English \u2014';
         } else {
             marker.textContent = `Translating to ${targetLang}`;
@@ -274,15 +330,23 @@ langSelect.addEventListener('change', async (e) => {
         captionFlow.insertBefore(marker, flowCursor);
 
         scrollToBottom();
-        try {
-            await fetch('/api/update-target', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ target_lang: targetLang })
-            });
-        } catch(err) { console.error(err); }
+        
+        if (ws && ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify({ type: 'subscribe', language: targetLang }));
+        }
+    } else {
+        // Even if not streaming, we want to subscribe so that when stream starts, we get the right language
+        if (ws && ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify({ type: 'subscribe', language: targetLang }));
+        }
     }
 });
+
+if (sourceSelect) {
+    sourceSelect.addEventListener('change', (e) => {
+        showToast(`Audio Source set to: ${e.target.options[e.target.selectedIndex].text}`, 'info');
+    });
+}
 
 // ── Button clicks ────────────────────────────────────────────────────────
 btnStart.addEventListener('click', startCaption);
@@ -307,12 +371,18 @@ function updateConnectionUI() {
 }
 
 function updateButtons() {
-    btnStart.disabled = isStreaming || !isConnected;
-    btnStart.innerHTML = isStreaming
-        ? `<svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg> Running`
-        : `<svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg> Start`;
-    btnStop.disabled = !isStreaming;
-    btnStop.classList.toggle('active', isStreaming);
+    if (btnStart) {
+        btnStart.disabled = isStreaming || !isConnected;
+        btnStart.innerHTML = isStreaming
+            ? `<svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg> Running`
+            : `<svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg> Start`;
+    }
+    if (btnStop) {
+        btnStop.disabled = !isStreaming;
+        btnStop.classList.toggle('active', isStreaming);
+    }
+    
+    if (sourceSelect) sourceSelect.disabled = isStreaming;
 }
 
 function updateLatency(s) {
@@ -324,5 +394,124 @@ function updateLatency(s) {
 // ═══════════════════════════════════════════════════════════════════════════
 
 // Sync default language from HTML
-targetLang = langSelect.value || 'English';
+targetLang = langSelect.value || 'English (Latin)';
 connectWebSocket();
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  MOBILE VIEWER BAR
+// ═══════════════════════════════════════════════════════════════════════════
+
+const mobileBar      = document.getElementById('mobile-viewer-bar');
+const mobileLangSel  = document.getElementById('mobile-lang-select');
+const mobileBtnPlay  = document.getElementById('mobile-btn-play');
+const mobileBtnPause = document.getElementById('mobile-btn-pause');
+
+let isLocallyPaused = false;  // Viewer-local pause — doesn't affect server
+
+function updateMobileBar() {
+    if (!mobileBar) return;
+    const hostRunning = isStreaming;
+    mobileBtnPlay.disabled  = hostRunning && !isLocallyPaused ? true : !hostRunning;
+    mobileBtnPause.disabled = !hostRunning;
+    mobileBtnPause.classList.toggle('active-pause', isLocallyPaused);
+    // Show button means: host is running AND we are currently paused
+    mobileBtnPlay.disabled = !hostRunning || !isLocallyPaused;
+}
+
+if (mobileLangSel) {
+    mobileLangSel.addEventListener('change', () => {
+        targetLang = mobileLangSel.value;
+        // Keep navbar dropdown in sync
+        if (langSelect) langSelect.value = targetLang;
+        showToast(`🌐 ${targetLang}`, 'info');
+        if (ws && ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify({ type: 'subscribe', language: targetLang }));
+        }
+    });
+}
+
+if (mobileBtnPlay) {
+    mobileBtnPlay.addEventListener('click', () => {
+        isLocallyPaused = false;
+        showToast('▶ Captions resumed', 'info');
+        showListening();
+        updateMobileBar();
+    });
+}
+
+if (mobileBtnPause) {
+    mobileBtnPause.addEventListener('click', () => {
+        isLocallyPaused = true;
+        hideListening();
+        showToast('⏸ Captions paused on your device', 'info');
+        updateMobileBar();
+    });
+}
+
+// Override handleMessage so paused viewers skip rendering
+const _origHandleMessage = handleMessage;
+window.handleMessage = function(msg) {
+    if (isLocallyPaused && msg.type !== 'error') return;
+    _origHandleMessage(msg);
+};
+// Re-bind WebSocket to use overridden handler
+function _patchWsMessage() {
+    if (!ws) return;
+    ws.onmessage = (ev) => {
+        try { window.handleMessage(JSON.parse(ev.data)); }
+        catch(e) { console.error('[WS]', e); }
+    };
+}
+
+// ── Host vs Viewer UI Separation ─────────────────────────────────────────
+if (!isHost) {
+    document.body.classList.add('viewer-mode');
+    // Hide laptop-only controls from the navbar
+    if (btnStart) btnStart.style.display = 'none';
+    if (btnStop)  btnStop.style.display  = 'none';
+    const audioSourceWrapper = document.getElementById('audio-source-wrapper');
+    if (audioSourceWrapper) audioSourceWrapper.style.display = 'none';
+
+    // Show the mobile bar
+    if (mobileBar) mobileBar.style.display = 'block';
+
+    // Welcome message for viewers
+    const wTitle = document.querySelector('#welcome-state h3');
+    if (wTitle) wTitle.textContent = '📱 Waiting for Host...';
+    const wDesc  = document.querySelector('#welcome-state p');
+    if (wDesc)  wDesc.textContent  = 'Select your language below. Captions will appear here automatically when the event begins.';
+    
+    // Sync mobile lang dropdown with navbar lang
+    if (mobileLangSel && langSelect) mobileLangSel.value = langSelect.value;
+    updateMobileBar();
+}
+
+// Auto-sync Viewer State
+async function checkStatus() {
+    try {
+        const res = await fetch('/api/status');
+        const data = await res.json();
+        if (data.running && !isStreaming) {
+            // Host just started — switch viewer to running state
+            isStreaming = true;
+            hideWelcome();
+        if (!isLocallyPaused) showListening();
+            updateButtons();
+            updateMobileBar();
+            // CRITICAL: re-send our language subscription
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify({ type: 'subscribe', language: targetLang }));
+            }
+        } else if (!data.running && isStreaming) {
+            isStreaming = false;
+            isLocallyPaused = false;
+            updateButtons();
+            updateMobileBar();
+            showWelcome();
+            hideListening();
+        }
+    } catch(e) {}
+}
+if (!isHost) {
+    setInterval(checkStatus, 2000);
+}

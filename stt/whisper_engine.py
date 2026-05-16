@@ -46,7 +46,7 @@ class WhisperEngine:
         )
         print(f"[STT] Model loaded in {time.time() - start_time:.1f}s")
 
-    def transcribe_chunk(self, audio_array: np.ndarray, language=None):
+    def transcribe_chunk(self, audio_array: np.ndarray, language=None, capture_mode="loopback"):
         """
         Transcribes audio. Returns (full_text, words_list).
         words_list is a list of word strings for word-by-word animation.
@@ -61,11 +61,14 @@ class WhisperEngine:
 
         try:
             # .en models can only transcribe English natively
-            # multilingual models use translate to always output English → IndicTrans2
+            # multilingual models use translate to always output English → Meta NLLB-600M
             task_mode = "transcribe" if self.is_en_only else "translate"
 
             # Use beam=3 on CPU for a balance of speed and high accuracy, beam=4 on GPU
             beam = 4 if self.device == "cuda" else 3
+
+            # Apply noise gate for microphone mode
+            vad_threshold = 0.65 if capture_mode == "mic" else 0.45
 
             segments, info = self.model.transcribe(
                 audio_array,
@@ -73,9 +76,17 @@ class WhisperEngine:
                 language=language,
                 task=task_mode,
                 vad_filter=True,
-                vad_parameters=dict(min_silence_duration_ms=500),
+                vad_parameters=dict(
+                    min_speech_duration_ms=250,   # strict threshold to cut latency
+                    min_silence_duration_ms=100,  # aggressive silence cutting
+                    speech_pad_ms=100,            # add slightly more padding
+                    threshold=vad_threshold,      # dynamic filter for noise
+                ),
                 word_timestamps=True,
                 condition_on_previous_text=False,
+                temperature=0.0,                  # greedy decoding — kills creative hallucination
+                compression_ratio_threshold=1.6,  # strict drop for hallucinated repeating segments
+                no_speech_threshold=0.45,         # strict probability drop
             )
 
             full_text = ""
@@ -83,7 +94,8 @@ class WhisperEngine:
 
             for segment in segments:
                 # Skip segments that are likely silence/noise
-                if segment.no_speech_prob >= 0.5:
+                if segment.no_speech_prob >= 0.45:
+                    print(f"[STT VAD] Dropped silent segment (prob={segment.no_speech_prob:.2f})")
                     continue
                 for word in segment.words:
                     w = word.word.strip()

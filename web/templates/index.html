@@ -120,12 +120,21 @@
                     </div>
                 </div>
                 <div class="nav-divider"></div>
+                <!-- Audio Source -->
+                <div class="info-cell" id="audio-source-wrapper">
+                    <span class="info-label">Audio Source</span>
+                    <select id="source-select" class="lang-dropdown">
+                        <option value="loopback" selected>System Audio</option>
+                        <option value="mic">Microphone</option>
+                    </select>
+                </div>
+                <div class="nav-divider"></div>
                 <!-- Output / Translate To -->
                 <div class="info-cell">
                     <span class="info-label">Translate To</span>
                     <select id="lang-select" class="lang-dropdown">
                         {% for lang in languages %}
-                        <option value="{{ lang }}" {{ 'selected' if lang == 'English' else '' }}>{{ lang }}</option>
+                        <option value="{{ lang }}" {{ 'selected' if lang == 'English (Latin)' else '' }}>{{ lang }}</option>
                         {% endfor %}
                     </select>
                 </div>
@@ -183,7 +192,7 @@
                             </svg>
                         </div>
                         <p class="welcome-title">Welcome to PolyVerba</p>
-                        <p class="welcome-sub">Choose <strong>Input Language</strong> and <strong>Translate To</strong> &mdash; then press <strong>Start</strong></p>
+                        <p class="welcome-sub">Choose <strong>Audio Source</strong> and <strong>Translate To</strong> &mdash; then press <strong>Start</strong></p>
                     </div>
 
                     <!--
@@ -211,9 +220,37 @@
         <!--  FOOTER BAR                                                -->
         <!-- ══════════════════════════════════════════════════════════ -->
         <footer class="footer-bar glass">
-            <span class="footer-text">Powered by <strong>Faster-Whisper</strong> &amp; <strong>IndicTrans2</strong> &bull; 100% Offline Edge AI</span>
+            <span class="footer-text">Powered by <strong>Faster-Whisper</strong> &amp; <strong>Meta NLLB-600M</strong> &bull; 100% Offline Edge AI</span>
         </footer>
 
+    </div>
+
+    <!-- ══════════════════════════════════════════════════════════ -->
+    <!--  MOBILE VIEWER CONTROL BAR (hidden on desktop/host)       -->
+    <!-- ══════════════════════════════════════════════════════════ -->
+    <div class="mobile-viewer-bar glass" id="mobile-viewer-bar" style="display:none">
+        <div class="mobile-viewer-inner">
+            <!-- Language Pill -->
+            <div class="mobile-lang-wrap">
+                <span class="mobile-label">🌐 Language</span>
+                <select id="mobile-lang-select" class="mobile-lang-dropdown">
+                    {% for lang in languages %}
+                    <option value="{{ lang }}" {{ 'selected' if lang == 'English (Latin)' else '' }}>{{ lang }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <!-- Viewer Play/Pause -->
+            <div class="mobile-btn-wrap">
+                <button class="mobile-btn mobile-btn-play" id="mobile-btn-play" disabled>
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+                    <span>Show</span>
+                </button>
+                <button class="mobile-btn mobile-btn-pause" id="mobile-btn-pause" disabled>
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16" rx="1"/><rect x="14" y="4" width="4" height="16" rx="1"/></svg>
+                    <span>Pause</span>
+                </button>
+            </div>
+        </div>
     </div>
 
     <script src="/static/app.js?v={{ v }}"></script>
